@@ -1129,6 +1129,8 @@ class BoTSORT(object):
                 current_similarities = current_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
             elif len(current_stracks) == 0 and len(current_similarities) > 0:
                 current_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
+            elif len(current_stracks) > 0 and len(current_similarities) == 0:
+                current_similarities = np.zeros([0, len(current_stracks)], dtype=np.float32)
             low_score_current_stracks: List[STrack] = [
                 STrack(
                     tlwh=STrack.tlbr_to_tlwh(np.asarray([box.x1,box.y1,box.x2,box.y2])),
@@ -1145,7 +1147,7 @@ class BoTSORT(object):
         # First association, with high score detection boxes
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
-        emb_dists = current_similarities if len(current_similarities) > 0 else np.zeros([0, len(boxes)], dtype=np.float32)
+        emb_dists = current_similarities
         emb_dists[emb_dists > self.appearance_thresh] = 1.0
         emb_dists[ious_dists_mask] = 1.0
         dists = np.minimum(ious_dists, emb_dists)
