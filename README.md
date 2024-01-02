@@ -10,6 +10,10 @@ BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cy
    1. https://github.com/PINTO0309/PINTO_model_zoo/tree/main/426_YOLOX-Body-Head-Hand
    2. https://github.com/PINTO0309/PINTO_model_zoo/tree/main/430_FastReID
 
+- ONNX export + Validation
+
+  https://github.com/PINTO0309/SMILEtrack
+
 ## Acknowledgments
 
 - https://github.com/NirAharon/BoT-SORT
