@@ -1562,12 +1562,13 @@ def main():
             model_path=feature_extractor_model_file,
             providers=providers,
         )
-    botsort = BoTSORT(
-        object_detection_model=object_detection_model,
-        feature_extractor_model=feature_extractor_model,
-        track_target_classes=track_target_classes,
-        frame_rate=30,
-    )
+    botsort = \
+        BoTSORT(
+            object_detection_model=object_detection_model,
+            feature_extractor_model=feature_extractor_model,
+            track_target_classes=track_target_classes,
+            frame_rate=30,
+        )
 
     cap = cv2.VideoCapture(
         int(video) if is_parsable_to_int(video) else video
