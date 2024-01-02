@@ -4,7 +4,7 @@
 runtime: https://github.com/microsoft/onnxruntime
 
 pip install onnxruntime or pip install onnxruntime-gpu
-pip install lap==0.4.0
+pip install lap==0.4.0 scipy==1.10.1
 """
 from __future__ import annotations
 import os
