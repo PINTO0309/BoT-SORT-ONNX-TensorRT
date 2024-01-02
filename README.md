@@ -1,5 +1,5 @@
 # BoT-SORT-ONNX-TensorRT
-BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cython_bbox and PyTorch.
+BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cython_bbox and PyTorch. Fast human tracker.
 
 - TensorRT + YOLOX-X + BoT-SORT
 
