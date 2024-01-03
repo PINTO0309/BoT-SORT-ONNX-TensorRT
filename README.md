@@ -106,7 +106,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
   |Custom Post-Process|Note|
   |:-:|:-|
-  |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: normalized section<br>`B`: COS similarity calculation section|
+  |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: Normalized section<br>`B`: COS similarity calculation section|
 
 ## Acknowledgments
 
