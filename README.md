@@ -107,3 +107,4 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
 - https://github.com/NirAharon/BoT-SORT
   - https://arxiv.org/abs/2206.14651
+- https://github.com/JDAI-CV/fast-reid
