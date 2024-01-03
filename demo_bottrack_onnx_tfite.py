@@ -4,7 +4,7 @@
 runtime: https://github.com/microsoft/onnxruntime
 
 pip install onnxruntime or pip install onnxruntime-gpu
-pip install lap==0.4.0 scipy==1.10.1
+pip install lap==0.4.0 scipy==1.10.1 opencv-contrib-python==4.9.0.80
 """
 from __future__ import annotations
 import os
@@ -1296,19 +1296,19 @@ def bbox_iou(atlbr: np.ndarray, btlbr: np.ndarray) -> float:
     # atlbr: [x1, y1, x2, y2]
     # btlbr: [x1, y1, x2, y2]
 
-    # 重なりの領域を計算
+    # Calculate areas of overlap
     inter_xmin = max(atlbr[0], btlbr[0])
     inter_ymin = max(atlbr[1], btlbr[1])
     inter_xmax = min(atlbr[2], btlbr[2])
     inter_ymax = min(atlbr[3], btlbr[3])
-    # 重なりがない場合
+    # If there is no overlap
     if inter_xmax <= inter_xmin or inter_ymax <= inter_ymin:
         return 0.0
-    # 重なりの面積と各バウンディングボックスの面積を計算
+    # Calculate area of overlap and area of each bounding box
     inter_area = (inter_xmax - inter_xmin) * (inter_ymax - inter_ymin)
     area1 = (atlbr[2] - atlbr[0]) * (atlbr[3] - atlbr[1])
     area2 = (btlbr[2] - btlbr[0]) * (btlbr[3] - btlbr[1])
-    # IoUを計算
+    # Calculate IoU
     iou = inter_area / float(area1 + area2 - inter_area)
     return iou
 
@@ -1361,7 +1361,6 @@ def fuse_motion(kf: KalmanFilter, cost_matrix: np.ndarray, tracks: List[STrack],
         return cost_matrix
     gating_dim = 2 if only_position else 4
     gating_threshold = KalmanFilter.chi2inv95[gating_dim]
-    # measurements = np.asarray([det.to_xyah() for det in detections])
     measurements = np.asarray([det.to_xywh() for det in detections])
     for row, track in enumerate(tracks):
         gating_distance = kf.gating_distance(
@@ -1379,7 +1378,6 @@ def fuse_iou(cost_matrix: np.ndarray, tracks: List[STrack], detections: List[STr
     fuse_sim = reid_sim * (1 + iou_sim) / 2
     det_scores = np.array([det.score for det in detections])
     det_scores = np.expand_dims(det_scores, axis=0).repeat(cost_matrix.shape[0], axis=0)
-    #fuse_sim = fuse_sim * (1 + det_scores) / 2
     fuse_cost = 1 - fuse_sim
     return fuse_cost
 
