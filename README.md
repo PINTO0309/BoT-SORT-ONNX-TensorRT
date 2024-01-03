@@ -84,6 +84,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 - Environment
   - onnx==1.15.0
   - onnxruntime-gpu==1.16.1 (TensorRT EP builtin)
+  - sit4onnx==1.0.7
   - numpy==1.24.3
   - scipy==1.10.1
   - opencv-contrib-python==4.9.0.80
