@@ -24,6 +24,7 @@ docker run --rm -it --gpus all \
 pinto0309/botsort_onnx_tensorrt:latest
 ```
 ```bash
+# ONNX files are downloaded automatically.
 python demo_bottrack_onnx_tflite.py -v 0
 
 python demo_bottrack_onnx_tflite.py -v xxxx.mp4
