@@ -67,8 +67,10 @@ options:
   -ep {cpu,cuda,tensorrt}, --execution_provider {cpu,cuda,tensorrt}
     Execution provider for ONNXRuntime.
   -dvw, --disable_video_writer
-    Disable video writer. Eliminates the file I/O load associated with automatic recording to MP4.
-    Devices that use a MicroSD card or similar for main storage can speed up overall processing.
+    Disable video writer. Eliminates the file I/O load associated with automatic recording
+    to MP4.
+    Devices that use a MicroSD card or similar for main storage can speed up overall
+    processing.
 ```
 ```bash
 # ONNX files are downloaded automatically.
