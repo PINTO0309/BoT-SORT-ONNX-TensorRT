@@ -2,7 +2,7 @@
 BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cython_bbox and PyTorch. Fast human tracker.
 
 ```bash
-docker pull pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3:latest
+docker pull pinto0309/botsort_onnx_tensorrt:latest
 
 # With USBCam
 xhost +local: && \
