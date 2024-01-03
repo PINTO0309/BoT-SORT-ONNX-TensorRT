@@ -102,6 +102,12 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
   https://github.com/PINTO0309/onnx2tf
 
+- YOLOX INPUTs/OUTPUTs/Custom post-process
+
+  |INPUTs/OUTPUTs/Post|Note|
+  |:-:|:-|
+  |![20240103191712](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/fa58c24f-69ee-4e9e-99f3-f2b93306787e)|・INPUTs<br>`input`: Entire image [1,3,H,W]<br>・OUTPUTs<br>`batchno_classid_score_x1y1x2y2`: [N,[batchNo,classid,score,x1,y1,x2,y2]]|
+
 - ReID INPUTs/OUTPUTs
 
   |INPUTs/OUTPUTs|Note|
