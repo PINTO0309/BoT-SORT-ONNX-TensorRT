@@ -19,6 +19,10 @@ BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cy
 
   https://github.com/PINTO0309/SMILEtrack
 
+- ONNX to TF/TFLite convert
+
+  https://github.com/PINTO0309/onnx2tf
+
 ## Acknowledgments
 
 - https://github.com/NirAharon/BoT-SORT
