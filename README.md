@@ -1,6 +1,14 @@
 # BoT-SORT-ONNX-TensorRT
 BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cython_bbox and PyTorch. Fast human tracker.
 
+```bash
+docker pull pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3:latest
+
+docker run --rm -it --gpus all \
+-v `pwd`:/workdir \
+pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3
+```
+
 - onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT
 
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/368bbfda-b204-4246-8663-259f999dab1c
