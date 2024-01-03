@@ -1441,7 +1441,7 @@ def main():
             'yolox_l_body_head_hand_post_0299_0.5420_1x3x384x640.onnx',
             'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx',
         ],
-        help='ONNX/TFLite file path for FastReID.',
+        help='ONNX/TFLite file path for YOLOX.',
     )
     parser.add_argument(
         '-fem',
