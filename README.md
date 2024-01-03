@@ -121,6 +121,10 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/647f6c0f-66c5-4213-b16c-fba534a0f2a6
 
+- onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT + USBCamera
+
+  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/5523ae9f-cae5-4734-83c9-9931f01dd2c8
+
 - Models
 
    1. https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/tag/onnx
