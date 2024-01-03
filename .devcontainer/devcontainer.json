@@ -1,0 +1,39 @@
+{
+    // https://containers.dev/implementors/json_reference/#variables-in-devcontainerjson
+    "name": "devcontainer",
+    "build": {
+        "context": "..",
+        "dockerfile": "../Dockerfile"
+    },
+
+    // Features to add to the dev container. More info: https://containers.dev/features
+    "features": {
+        "ghcr.io/devcontainers/features/python:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+				"usernamehw.errorlens",
+				"MS-CEINTL.vscode-language-pack-ja",
+				"ms-python.python",
+				"deitry.colcon-helper",
+				"redhat.vscode-yaml",
+				"docsmsft.docs-yaml",
+				"twxs.cmake",
+				"TqrHsn.vscode-docker-registry-explorer",
+				"oderwat.indent-rainbow",
+				"mosapride.zenkaku",
+				"ryu1kn.partial-diff",
+				"ionutvmi.path-autocomplete",
+				"mechatroner.rainbow-csv",
+				"ms-python.vscode-pylance@2023.10.53"
+			]
+        }
+    },
+    // GPU / USB Camera mount
+    "runArgs": [
+        "--gpus", "all"
+    ]
+}
