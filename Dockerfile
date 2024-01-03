@@ -1,4 +1,4 @@
-FROM pinto0309/ubuntu22.04-cuda11.8:latest
+FROM pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
