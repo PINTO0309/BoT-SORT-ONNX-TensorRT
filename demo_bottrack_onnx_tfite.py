@@ -1202,7 +1202,6 @@ class BoTSORT(object):
                 track.mark_lost()
                 lost_stracks.append(track)
 
-
         # Deal with unconfirmed tracks, usually tracks with only one beginning frame
         unconfirmed_boxes = [current_stracks[i] for i in u_detection]
         ious_dists = iou_distance(unconfirmed_stracks, unconfirmed_boxes)
