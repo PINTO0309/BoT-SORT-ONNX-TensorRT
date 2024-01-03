@@ -15,6 +15,7 @@ RUN pip install pip -U \
     && pip install \
     onnx==1.15.0 \
     onnxsim==0.4.33 \
+    # TensorRT 8.5.3
     https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/onnxruntime_gpu-1.16.1-cp310-cp310-linux_x86_64.whl \
     sit4onnx==1.0.7 \
     opencv-contrib-python==4.9.0.80 \
