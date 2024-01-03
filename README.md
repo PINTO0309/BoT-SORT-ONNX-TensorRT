@@ -102,7 +102,13 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
   https://github.com/PINTO0309/onnx2tf
 
-- Custom post-process
+- ReID INPUTs/OUTPUTs
+
+  |INPUTs/OUTPUTs|Note|
+  |:-:|:-|
+  |![20240103190410](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/3d05ff23-d379-4a6a-a762-50efa62a4ab4)|・INPUTs<br>`base_images`: N human images<br>`target_features`: M human features extracted in the previous inference<br><br>・OUTPUTs<br>`similarities`: COS similarity between N human features and target_features<br>`base_features`: N human features|
+
+- ReID custom post-process
 
   |Custom Post-Process|Note|
   |:-:|:-|
