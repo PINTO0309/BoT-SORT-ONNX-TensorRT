@@ -12,7 +12,7 @@ docker run --rm -it --gpus all \
 -e DISPLAY=$DISPLAY \
 -v /tmp/.X11-unix/:/tmp/.X11-unix:rw \
 --device /dev/video0:/dev/video0:mwr \
-pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3
+pinto0309/botsort_onnx_tensorrt:latest
 
 # Without USBCam
 xhost +local: && \
@@ -21,7 +21,7 @@ docker run --rm -it --gpus all \
 -e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
 -e DISPLAY=$DISPLAY \
 -v /tmp/.X11-unix/:/tmp/.X11-unix:rw \
-pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3
+pinto0309/botsort_onnx_tensorrt:latest
 ```
 
 **`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**
