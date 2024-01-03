@@ -23,3 +23,5 @@ RUN pip install pip -U \
     scipy==1.10.1
 
 RUN pip install lap==0.4.0
+
+RUN echo "sudo chmod 777 /dev/video*" >> ~/.bashrc
