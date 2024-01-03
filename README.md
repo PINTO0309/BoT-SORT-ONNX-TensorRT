@@ -4,8 +4,13 @@ BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cy
 ```bash
 docker pull pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3:latest
 
+xhost +local: && \
 docker run --rm -it --gpus all \
 -v `pwd`:/workdir \
+-e XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
+-e DISPLAY=$DISPLAY \
+-v /tmp/.X11-unix/:/tmp/.X11-unix:rw \
+--device /dev/video0:/dev/video0:mwr \
 pinto0309/ubuntu22.04-cuda11.8-tensorrt8.5.3
 ```
 
