@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "debug",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "-odm", "yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx",
+                "-v", "test_640x360.mp4",
+                "-ep", "tensorrt",
+            ]
+        }
+    ]
+}
