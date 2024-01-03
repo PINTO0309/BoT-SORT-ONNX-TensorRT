@@ -78,8 +78,40 @@ python demo_bottrack_onnx_tflite.py -v 0
 python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 ```
 
-**`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**
-===
+- **`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**
+- All processing and models are optimized for TensorRT, which is very slow on CPU and CUDA.
+- Because of the N batches x M batches variable batch input model, CUDA is extremely slow due to the frequent GPU initialization process.
+- Environment
+  - onnx==1.15.0
+  - onnxruntime-gpu==1.16.1 (TensorRT EP builtin)
+  - numpy==1.24.3
+  - scipy==1.10.1
+  - opencv-contrib-python==4.9.0.80
+  - pycuda==2022.2
+  - onnx-tensorrt==release/8.5-GA
+    - Tricks with docker build 
+      ```dockerfile
+      # Install onnx-tensorrt
+      RUN git clone -b release/8.5-GA --recursive https://github.com/onnx/onnx-tensorrt ../onnx-tensorrt \
+          && pushd ../onnx-tensorrt \
+          && mkdir build \
+          && pushd build \
+          && cmake .. -DTENSORRT_ROOT=/usr/src/tensorrt \
+          && make -j$(nproc) \
+          && sudo make install \
+          && popd \
+          && popd \
+          && pip install onnx==${ONNXVER} \
+          && pip install pycuda==${PYCUDAVER} \
+          && echo 'pushd ../onnx-tensorrt > /dev/null' >> ~/.bashrc \
+          # At docker build time, setup.py fails because NVIDIA's physical GPU device cannot be detected.
+          # Therefore, a workaround is applied to configure setup.py to run on first access.
+          # By Katsuya Hyodo
+          && echo 'python setup.py install --user 1>/dev/null 2>/dev/null' >> ~/.bashrc \
+          && echo 'popd > /dev/null' >> ~/.bashrc \
+          && echo 'export CUDA_MODULE_LOADING=LAZY' >> ~/.bashrc \
+          && echo 'export PATH=${PATH}:/usr/src/tensorrt/bin:${HOME}/onnx-tensorrt/build' >> ~/.bashrc
+      ```
 
 - onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT
 
@@ -88,6 +120,10 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 - onnxruntime + TensorRT 8.5.3 + YOLOX-Nano + BoT-SORT
 
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/647f6c0f-66c5-4213-b16c-fba534a0f2a6
+
+- onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT + USBCamera
+
+  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/5523ae9f-cae5-4734-83c9-9931f01dd2c8
 
 - Models
 
@@ -103,11 +139,23 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
   https://github.com/PINTO0309/onnx2tf
 
-- Custom post-process
+- YOLOX INPUTs/OUTPUTs/Custom post-process
+
+  |INPUTs/OUTPUTs/Post-Process|Note|
+  |:-:|:-|
+  |![20240103191712](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/fa58c24f-69ee-4e9e-99f3-f2b93306787e)|・INPUTs<br>`input`: Entire image [1,3,H,W]<br><br>・OUTPUTs<br>`batchno_classid_score_x1y1x2y2`: [N,[batchNo,classid,score,x1,y1,x2,y2]]. Final output with NMS implemented|
+
+- ReID INPUTs/OUTPUTs
+
+  |INPUTs/OUTPUTs|Note|
+  |:-:|:-|
+  |![20240103190410](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/3d05ff23-d379-4a6a-a762-50efa62a4ab4)|・INPUTs<br>`base_images`: N human images<br>`target_features`: M human features extracted in the previous inference<br><br>・OUTPUTs<br>`similarities`: COS similarity between N human features and target_features<br>`base_features`: N human features|
+
+- ReID custom post-process
 
   |Custom Post-Process|Note|
   |:-:|:-|
-  |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: normalized section<br>`B`: COS similarity calculation section|
+  |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: Normalized section<br>`B`: COS similarity calculation section|
 
 ## Acknowledgments
 
