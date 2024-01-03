@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Optimize for up to 10000 ReIDs of 100 x 1.
+# Optimize for up to 100 ReIDs of 100 x 1.
 # e.g. ./optimize_reid_tensorrt_engine.sh mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx
 
 input_file="$1"
