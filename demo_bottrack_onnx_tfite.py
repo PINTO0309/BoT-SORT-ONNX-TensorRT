@@ -386,12 +386,30 @@ class BaseTrack(object):
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh, score: float, classid: int, feature=None, feature_history: int=50):
+    def __init__(self, tlwh: np.ndarray, score: float, classid: int, feature: np.ndarray=None, feature_history: int=50):
+        """STrack
 
+        Parameters
+        ----------
+        tlwh: np.ndarray
+            Top-left, width, height. [x1, y1, w, h]
+
+        score: float
+            Object detection score.
+
+        classid: int
+            Class ID.
+
+        feature: Optional[np.ndarray]
+            Features obtained from the feature extractor.
+
+        feature_history: Optional[int]
+        """
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float32)
         self.kalman_filter: KalmanFilter = None
-        self.mean, self.covariance = None, None
+        self.mean = None
+        self.covariance = None
         self.is_activated = False
 
         self.score = score
@@ -405,7 +423,7 @@ class STrack(BaseTrack):
         self.features = deque([], maxlen=feature_history)
         self.alpha = 0.9
 
-    def update_features(self, feature):
+    def update_features(self, feature: np.ndarray):
         feature /= np.linalg.norm(feature)
         self.curr_feature = feature
         if self.smooth_feature is None:
@@ -438,7 +456,7 @@ class STrack(BaseTrack):
                 stracks[i].covariance = cov
 
     @staticmethod
-    def multi_gmc(stracks: List[STrack], H=np.eye(2, 3)):
+    def multi_gmc(stracks: List[STrack], H: np.ndarray=np.eye(2, 3)):
         if len(stracks) > 0:
             multi_mean = np.asarray([st.mean.copy() for st in stracks])
             multi_covariance = np.asarray([st.covariance for st in stracks])
@@ -469,7 +487,7 @@ class STrack(BaseTrack):
         self.frame_id = frame_id
         self.start_frame = frame_id
 
-    def re_activate(self, new_track: STrack, frame_id: int, new_id=False):
+    def re_activate(self, new_track: STrack, frame_id: int, new_id: bool=False):
 
         self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh))
         if new_track.curr_feature is not None:
@@ -535,7 +553,7 @@ class STrack(BaseTrack):
         return ret
 
     @staticmethod
-    def tlwh_to_xyah(tlwh):
+    def tlwh_to_xyah(tlwh: np.ndarray):
         """Convert bounding box to format `(center x, center y, aspect ratio,
         height)`, where the aspect ratio is `width / height`.
         """
@@ -545,7 +563,7 @@ class STrack(BaseTrack):
         return ret
 
     @staticmethod
-    def tlwh_to_xywh(tlwh):
+    def tlwh_to_xywh(tlwh: np.ndarray):
         """Convert bounding box to format `(center x, center y, width,
         height)`.
         """
@@ -557,14 +575,14 @@ class STrack(BaseTrack):
         return self.tlwh_to_xywh(self.tlwh)
 
     @staticmethod
-    def tlbr_to_tlwh(tlbr):
+    def tlbr_to_tlwh(tlbr: np.ndarray):
         ret = np.asarray(tlbr).copy()
         ret[2:] -= ret[:2]
         return ret
 
     @staticmethod
-    def tlwh_to_tlbr(tlwh):
-        ret: np.ndarray = np.asarray(tlwh).copy()
+    def tlwh_to_tlbr(tlwh: np.ndarray):
+        ret = np.asarray(tlwh).copy()
         ret[2:] += ret[:2]
         return ret
 
@@ -1079,7 +1097,6 @@ class BoTSORT(object):
 
         # Predict the current location with KF
         STrack.multi_predict(strack_pool)
-
 
         # Extract embeddings
         # Feature extraction of detected objects and
