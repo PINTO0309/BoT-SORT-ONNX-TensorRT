@@ -89,6 +89,29 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
   - opencv-contrib-python==4.9.0.80
   - pycuda==2022.2
   - onnx-tensorrt==release/8.5-GA
+    - Tricks with docker build 
+      ```dockerfile
+      # Install onnx-tensorrt
+      RUN git clone -b release/8.5-GA --recursive https://github.com/onnx/onnx-tensorrt ../onnx-tensorrt \
+          && pushd ../onnx-tensorrt \
+          && mkdir build \
+          && pushd build \
+          && cmake .. -DTENSORRT_ROOT=/usr/src/tensorrt \
+          && make -j$(nproc) \
+          && sudo make install \
+          && popd \
+          && popd \
+          && pip install onnx==${ONNXVER} \
+          && pip install pycuda==${PYCUDAVER} \
+          && echo 'pushd ../onnx-tensorrt > /dev/null' >> ~/.bashrc \
+          # At docker build time, setup.py fails because NVIDIA's physical GPU device cannot be detected.
+          # Therefore, a workaround is applied to configure setup.py to run on first access.
+          # By Katsuya Hyodo
+          && echo 'python setup.py install --user 1>/dev/null 2>/dev/null' >> ~/.bashrc \
+          && echo 'popd > /dev/null' >> ~/.bashrc \
+          && echo 'export CUDA_MODULE_LOADING=LAZY' >> ~/.bashrc \
+          && echo 'export PATH=${PATH}:/usr/src/tensorrt/bin:${HOME}/onnx-tensorrt/build' >> ~/.bashrc
+      ```
 
 - onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT
 
