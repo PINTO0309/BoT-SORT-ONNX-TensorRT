@@ -68,8 +68,7 @@ options:
     Execution provider for ONNXRuntime.
   -dvw, --disable_video_writer
     Disable video writer. Eliminates the file I/O load associated with automatic recording
-    to MP4.
-    Devices that use a MicroSD card or similar for main storage can speed up overall
+    to MP4. Devices that use a MicroSD card or similar for main storage can speed up overall
     processing.
 ```
 ```bash
