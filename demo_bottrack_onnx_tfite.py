@@ -13,6 +13,7 @@ import copy
 import cv2
 import time
 import lap
+import requests
 import numpy as np
 import scipy.linalg
 from enum import Enum
@@ -1443,6 +1444,31 @@ def is_package_installed(package_name: str):
     """
     return importlib.util.find_spec(package_name) is not None
 
+def download_file(url, folder, filename):
+    """
+    Download a file from a URL and save it to a specified folder.
+    If the folder does not exist, it is created.
+
+    :param url: URL of the file to download.
+    :param folder: Folder where the file will be saved.
+    :param filename: Filename to save the file.
+    """
+    # Create the folder if it does not exist
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    # Full path for the file
+    file_path = os.path.join(folder, filename)
+    # Download the file
+    print(f"{Color.GREEN('Downloading...')} {url} to {file_path}")
+    response = requests.get(url, stream=True)
+    if response.status_code == 200:
+        with open(file_path, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        print(f"{Color.GREEN('Download completed:')} {file_path}")
+    else:
+        print(f"Failed to download. Status code: {response.status_code}")
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(
@@ -1537,6 +1563,19 @@ def main():
             print(Color.RED('ERROR: https://github.com/PINTO0309/TensorflowLite-bin'))
             print(Color.RED('ERROR: https://github.com/tensorflow/tensorflow'))
             sys.exit(0)
+
+    WEIGHT_FOLDER_PATH = '.'
+    # Download object detection onnx
+    weight_file = os.path.basename(object_detection_model_file)
+    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
+    if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
+
+    # Download reid onnx
+    weight_file = os.path.basename(feature_extractor_model_file)
+    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
+    if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
 
     track_target_classes: List[int] = args.track_target_classes
     video: str = args.video
