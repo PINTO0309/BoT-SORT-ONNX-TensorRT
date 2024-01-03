@@ -23,6 +23,53 @@ docker run --rm -it --gpus all \
 -v /tmp/.X11-unix/:/tmp/.X11-unix:rw \
 pinto0309/botsort_onnx_tensorrt:latest
 ```
+```
+# ONNX files are downloaded automatically.
+usage: demo_bottrack_onnx_tfite.py \
+  [-h] \
+  [-odm {
+    yolox_n_body_head_hand_post_0461_0.4428_1x3x384x640.onnx,
+    yolox_t_body_head_hand_post_0299_0.4522_1x3x384x640.onnx,
+    yolox_s_body_head_hand_post_0299_0.4983_1x3x384x640.onnx,
+    yolox_m_body_head_hand_post_0299_0.5263_1x3x384x640.onnx,
+    yolox_l_body_head_hand_post_0299_0.5420_1x3x384x640.onnx,
+    yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx
+  }] \
+  [-fem {
+    mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x288x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x320x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x352x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x384x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x256x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x288x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x320x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x352x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x384x128_post_feature_only.onnx
+  }] \
+  [-tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]] \
+  [-v VIDEO] \
+  [-ep {cpu,cuda,tensorrt}] \
+  [-dvw]
+
+options:
+  -h, --help
+    show this help message and exit
+  -odm {...}, --object_detection_model {...}
+    ONNX/TFLite file path for YOLOX.
+  -fem {...}, --feature_extractor_model {...}
+    ONNX/TFLite file path for FastReID.
+  -tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...], \
+    --track_target_classes TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]
+    List of class IDs to be tracked. 0:Body, 1: Head, 2: Hand
+  -v VIDEO, --video VIDEO
+    Video file path or camera index.
+  -ep {cpu,cuda,tensorrt}, --execution_provider {cpu,cuda,tensorrt}
+    Execution provider for ONNXRuntime.
+  -dvw, --disable_video_writer
+    Disable video writer. Eliminates the file I/O load associated with automatic recording to MP4.
+    Devices that use a MicroSD card or similar for main storage can speed up overall processing.
+```
 ```bash
 # ONNX files are downloaded automatically.
 python demo_bottrack_onnx_tflite.py -v 0
@@ -42,7 +89,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/647f6c0f-66c5-4213-b16c-fba534a0f2a6
 
 - Models
-  
+
    1. https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/tag/onnx
    2. https://github.com/PINTO0309/PINTO_model_zoo/tree/main/426_YOLOX-Body-Head-Hand
    3. https://github.com/PINTO0309/PINTO_model_zoo/tree/main/430_FastReID
