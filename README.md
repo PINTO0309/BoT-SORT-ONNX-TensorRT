@@ -84,6 +84,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 - The pre-optimized TensorRT Engine for RTX 30xx (Compute Capability 8.6) is automatically downloaded. If you are using a GPU model number other than RTX 30xx (Compute Capability 8.6), you will need to optimize the TensorRT Engine for each GPU model. https://developer.nvidia.com/cuda-gpus
 - TensorRT Engine optimization
   ```bash
+  pip install -U sit4onnx
   # It takes about 221 seconds.
   ./optimize_od_tensorrt_engine.sh yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx
   # It takes about 24,284 seconds. (More than 6 hours and 30 minutes.)
