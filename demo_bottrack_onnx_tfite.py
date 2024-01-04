@@ -8,12 +8,14 @@ pip install lap==0.4.0 scipy==1.10.1 opencv-contrib-python==4.9.0.80
 """
 from __future__ import annotations
 import os
+import re
 import sys
 import copy
 import cv2
 import time
 import lap
 import requests
+import subprocess
 import numpy as np
 import scipy.linalg
 from enum import Enum
@@ -23,6 +25,25 @@ from argparse import ArgumentParser
 from typing import Tuple, Optional, List, Dict
 import importlib.util
 from abc import ABC, abstractmethod
+
+# https://developer.nvidia.com/cuda-gpus
+NVIDIA_GPU_MODELS_CC = [
+    'RTX 3050', 'RTX 3060', 'RTX 3070', 'RTX 3080', 'RTX 3090',
+]
+
+ONNX_TRTENGINE_SETS = {
+    'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx': [
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_0_0_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.profile',
+    ],
+    'mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx': [
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_377269473329240331_0_0_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_377269473329240331_0_0_fp16_sm86.profile',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_377269473329240331_1_1_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_377269473329240331_1_1_fp16_sm86.profile',
+    ],
+}
 
 class Color(Enum):
     BLACK          = '\033[30m'
@@ -1468,6 +1489,18 @@ def download_file(url, folder, filename):
     else:
         print(f"Failed to download. Status code: {response.status_code}")
 
+def get_nvidia_gpu_model() -> List[str]:
+    try:
+        # Run nvidia-smi command
+        output = subprocess.check_output(["nvidia-smi", "-L"], text=True)
+
+        # Extract GPU model numbers using regular expressions
+        models = re.findall(r'GPU \d+: (.*?)(?= \(UUID)', output)
+        return models
+    except Exception as e:
+        print(f"Error: {e}")
+        return []
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(
@@ -1564,17 +1597,42 @@ def main():
             sys.exit(0)
 
     WEIGHT_FOLDER_PATH = '.'
+    gpu_models = get_nvidia_gpu_model()
+    default_supported_gpu_model = False
+    if len(gpu_models) == 1:
+        gpu_model = gpu_models[0]
+        for target_gpu_model in NVIDIA_GPU_MODELS_CC:
+            if target_gpu_model in gpu_model:
+                default_supported_gpu_model = True
+                break
+
     # Download object detection onnx
     weight_file = os.path.basename(object_detection_model_file)
-    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
     if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
         download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
+    # Download object detection tensorrt engine
+    if default_supported_gpu_model:
+        trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
+        if trt_engine_files is not None:
+            for trt_engine_file in trt_engine_files:
+                if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, trt_engine_file)):
+                    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
+                    download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
 
     # Download reid onnx
     weight_file = os.path.basename(feature_extractor_model_file)
-    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
     if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
         download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
+    # Download reid tensorrt engine
+    if default_supported_gpu_model:
+        trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
+        if trt_engine_files is not None:
+            for trt_engine_file in trt_engine_files:
+                if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, trt_engine_file)):
+                    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
+                    download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
 
     track_target_classes: List[int] = args.track_target_classes
     video: str = args.video
