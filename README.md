@@ -169,7 +169,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 
 - Adjustment of YOLOX NMS parameters 
 
-  Because I add my own post-processing to the end of the model, which can be inferred by TensorRT, CUDA, and CPU, the benchmarked inference speed is the end-to-end processing speed including all pre-processing and post-processing. EfficientNMS in TensorRT is very slow and should be offloaded to the CPU.
+  Because I add my own post-processing to the end of the model, which can be inferred by TensorRT, CUDA, and CPU, the benchmarked inference speed is the end-to-end processing speed including all pre-processing and post-processing. EfficientNMS in TensorRT is very slow and should be offloaded to the CPU. Also, the ONNX and TensorRT Engine published in this repository are optimized for my hobby use, so the score threshold, IoU threshold, and maximum number of output boxes need to be adjusted according to your requirements.
 
   - NMS default parameter
 
