@@ -2,6 +2,7 @@
 
 # Optimize for up to 100 ReIDs of 100 x 1.
 # e.g. ./optimize_reid_tensorrt_engine.sh mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx
+# elapsed_time: 24284 sec
 
 input_file="$1"
 

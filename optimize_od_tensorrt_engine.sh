@@ -2,6 +2,7 @@
 
 # Optimize for Object Detection.
 # e.g. ./optimize_od_tensorrt_engine.sh yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx
+# elapsed_time: 221 sec
 
 input_file="$1"
 
