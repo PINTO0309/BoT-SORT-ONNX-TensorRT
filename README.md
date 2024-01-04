@@ -23,6 +23,12 @@ docker run --rm -it --gpus all \
 -v /tmp/.X11-unix/:/tmp/.X11-unix:rw \
 pinto0309/botsort_onnx_tensorrt:latest
 ```
+```bash
+# ONNX files are downloaded automatically.
+python demo_bottrack_onnx_tflite.py -v 0
+
+python demo_bottrack_onnx_tflite.py -v xxxx.mp4
+```
 ```
 # ONNX files are downloaded automatically.
 usage: demo_bottrack_onnx_tfite.py \
@@ -70,12 +76,6 @@ options:
     Disable video writer. Eliminates the file I/O load associated with automatic recording
     to MP4. Devices that use a MicroSD card or similar for main storage can speed up overall
     processing.
-```
-```bash
-# ONNX files are downloaded automatically.
-python demo_bottrack_onnx_tflite.py -v 0
-
-python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 ```
 
 - **`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**
