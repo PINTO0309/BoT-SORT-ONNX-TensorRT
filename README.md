@@ -1,6 +1,7 @@
 # BoT-SORT-ONNX-TensorRT
 BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cython_bbox and PyTorch. Fast human tracker.
 
+This repository does not use the less accurate CNN Feature Extractor.　Instead, use Transformer's Fast-ReID model.
 ```bash
 docker pull pinto0309/botsort_onnx_tensorrt:latest
 
