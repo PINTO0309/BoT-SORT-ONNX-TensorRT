@@ -20,7 +20,8 @@ RUN pip install pip -U \
     sit4onnx==1.0.7 \
     opencv-contrib-python==4.9.0.80 \
     numpy==1.24.3 \
-    scipy==1.10.1
+    scipy==1.10.1 \
+    requests==2.31.0
 
 RUN pip install lap==0.4.0
 
