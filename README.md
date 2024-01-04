@@ -97,6 +97,7 @@ options:
   - numpy==1.24.3
   - scipy==1.10.1
   - opencv-contrib-python==4.9.0.80
+  - requests==2.31.0
   - pycuda==2022.2
   - onnx-tensorrt==release/8.5-GA
     - Tricks with docker build
