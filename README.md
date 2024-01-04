@@ -167,6 +167,55 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
   |:-:|:-|
   |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: Normalized section<br>`B`: COS similarity calculation section|
 
+- Adjustment of YOLOX NMS parameters 
+
+  Because I add my own post-processing to the end of the model, which can be inferred by TensorRT, CUDA, and CPU, the benchmarked inference speed is the end-to-end processing speed including all pre-processing and post-processing. EfficientNMS in TensorRT is very slow and should be offloaded to the CPU.
+
+  - NMS default parameter
+
+    |param|value|note|
+    |:-|-:|:-|
+    |max_output_boxes_per_class|20|Maximum number of outputs per class of one type. `20` indicates that the maximum number of people detected is `20`, the maximum number of heads detected is `20`, and the maximum number of hands detected is `20`. The larger the number, the more people can be detected, but the inference speed slows down slightly due to the larger overhead of NMS processing by the CPU. In addition, as the number of elements in the final output tensor increases, the amount of information transferred between hardware increases, resulting in higher transfer costs on the hardware circuit. Therefore, it would be desirable to set the numerical size to the minimum necessary.|
+    |iou_threshold|0.40|A value indicating the percentage of occlusion allowed for multiple bounding boxes of the same class. `0.40` is excluded from the detection results if, for example, two bounding boxes overlap in more than 41% of the area. The smaller the value, the more occlusion is tolerated, but over-detection may increase.|
+    |score_threshold|0.25|Bounding box confidence threshold. Specify in the range of `0.00` to `1.00`. The larger the value, the stricter the filtering and the lower the NMS processing load, but in exchange, all but bounding boxes with high confidence values are excluded from detection. This is a parameter that has a very large percentage impact on NMS overhead.|
+
+  - Change NMS parameters
+
+    Use **[PINTO0309/sam4onnx](https://github.com/PINTO0309/sam4onnx)** to rewrite the `NonMaxSuppression` parameter in the ONNX file.
+
+    For example,
+    ```bash
+    pip install onnxsim==0.4.33 \
+    && pip install -U simple-onnx-processing-tools \
+    && pip install -U onnx \
+    && python -m pip install -U onnx_graphsurgeon \
+        --index-url https://pypi.ngc.nvidia.com
+
+    ### max_output_boxes_per_class
+    ### Example of changing the maximum number of detections per class to 100.
+    sam4onnx \
+    --op_name main01_nonmaxsuppression11 \
+    --input_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --output_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --input_constants main01_max_output_boxes_per_class int64 [100]
+
+    ### iou_threshold
+    ### Example of changing the allowable area of occlusion to 20%.
+    sam4onnx \
+    --op_name main01_nonmaxsuppression11 \
+    --input_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --output_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --input_constants main01_iou_threshold float32 [0.20]
+
+    ### score_threshold
+    ### Example of changing the bounding box score threshold to 15%.
+    sam4onnx \
+    --op_name main01_nonmaxsuppression11 \
+    --input_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --output_onnx_file_path yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx \
+    --input_constants main01_score_threshold float32 [0.15]
+    ```
+
 ## Acknowledgments
 
 - https://github.com/NirAharon/BoT-SORT
