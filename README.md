@@ -81,7 +81,7 @@ python demo_bottrack_onnx_tflite.py -v xxxx.mp4
 - **`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**
 - All processing and models are optimized for TensorRT, which is very slow on CPU and CUDA.
 - Because of the N batches x M batches variable batch input model, CUDA is extremely slow due to the frequent GPU initialization process.
-- The pre-optimized TensorRT Engine for RTX 30xx (Compute Capability 8.6) is automatically downloaded. If you are using a GPU model number other than RTX 30xx (Compute Capability 8.6), you will need to optimize the TensorRT Engine for each GPU model.
+- The pre-optimized TensorRT Engine for RTX 30xx (Compute Capability 8.6) is automatically downloaded. If you are using a GPU model number other than RTX 30xx (Compute Capability 8.6), you will need to optimize the TensorRT Engine for each GPU model. https://developer.nvidia.com/cuda-gpus
 - TensorRT Engine optimization
   ```bash
   # It takes about 221 seconds.
