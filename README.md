@@ -99,7 +99,7 @@ options:
   - opencv-contrib-python==4.9.0.80
   - pycuda==2022.2
   - onnx-tensorrt==release/8.5-GA
-    - Tricks with docker build 
+    - Tricks with docker build
       ```dockerfile
       # Install onnx-tensorrt
       RUN git clone -b release/8.5-GA --recursive https://github.com/onnx/onnx-tensorrt ../onnx-tensorrt \
@@ -167,7 +167,7 @@ options:
   |:-:|:-|
   |![image](https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/8bf44dec-9b00-4d9b-8aa6-e4f7087b3deb)|`A`: Normalized section<br>`B`: COS similarity calculation section|
 
-- Adjustment of YOLOX NMS parameters 
+- Adjustment of YOLOX NMS parameters
 
   Because I add my own post-processing to the end of the model, which can be inferred by TensorRT, CUDA, and CPU, the benchmarked inference speed is the end-to-end processing speed including all pre-processing and post-processing. EfficientNMS in TensorRT is very slow and should be offloaded to the CPU. Also, the ONNX and TensorRT Engine published in this repository are optimized for my hobby use, so the score threshold, IoU threshold, and maximum number of output boxes need to be adjusted according to your requirements. If the detection performance of YOLOX-X is very high, but the number of bounding box outputs for object detection seems low, you may need to adjust the maximum number of output boxes or score threshold.
 
