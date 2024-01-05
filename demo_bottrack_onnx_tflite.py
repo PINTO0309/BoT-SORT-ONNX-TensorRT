@@ -444,6 +444,7 @@ class STrack(BaseTrack):
         if feature is not None:
             self.update_features(feature)
         self.features = deque([], maxlen=feature_history)
+        self.feature_history = feature_history
         self.alpha = 0.9
 
     def update_features(self, feature: np.ndarray):
