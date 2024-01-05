@@ -4,6 +4,11 @@ BoT-SORT + YOLOX implemented using only onnxruntime, Numpy and scipy, without cy
 This repository does not use the less accurate CNN Feature Extractor. Instead, use Transformer's Fast-ReID Feature Extractor.
 
 https://github.com/PINTO0309/PINTO_model_zoo/tree/main/430_FastReID#4-similarity-validation
+
+Tolerance with respect to occlusion would be considerably more accurate using ByteTrack's MOT17 model than using my YOLOX model.
+
+https://github.com/ifzhang/ByteTrack
+
 ```bash
 docker pull pinto0309/botsort_onnx_tensorrt:latest
 
