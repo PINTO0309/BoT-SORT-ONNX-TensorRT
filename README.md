@@ -5,7 +5,7 @@ This repository does not use the less accurate CNN Feature Extractor. Instead, u
 
 https://github.com/PINTO0309/PINTO_model_zoo/tree/main/430_FastReID#4-similarity-validation
 
-Tolerance with respect to occlusion would be considerably more accurate using ByteTrack's MOT17 model than using my YOLOX model.
+Tolerance with respect to occlusion would be considerably more accurate using ByteTrack's MOT17 model than using my YOLOX model. However, I did not include ByteTrack's object detection model in this repository because I wanted to detect body parts other than the whole body at the same time with high accuracy.
 
 https://github.com/ifzhang/ByteTrack
 
@@ -233,3 +233,4 @@ options:
 - https://github.com/NirAharon/BoT-SORT
   - https://arxiv.org/abs/2206.14651
 - https://github.com/JDAI-CV/fast-reid
+- https://github.com/ifzhang/ByteTrack
