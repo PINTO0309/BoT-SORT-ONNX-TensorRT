@@ -408,7 +408,7 @@ class BaseTrack(object):
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh: np.ndarray, score: float, classid: int, feature: np.ndarray=None, feature_history: int=50):
+    def __init__(self, tlwh: np.ndarray, score: float, classid: int, feature_history: int, feature: np.ndarray=None):
         """STrack
 
         Parameters
@@ -422,10 +422,11 @@ class STrack(BaseTrack):
         classid: int
             Class ID.
 
+        feature_history: int
+            Number of features to be retained in history.
+
         feature: Optional[np.ndarray]
             Features obtained from the feature extractor.
-
-        feature_history: Optional[int]
         """
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float32)
@@ -1074,6 +1075,7 @@ class BoTSORT(object):
         self.new_track_thresh: float = 0.9 # new track thresh Default: 0.7
         self.match_thresh: float = 0.8 # matching threshold for tracking Default: 0.8
         self.track_buffer: int = 300 # the frames for keep lost tracks Default: 30
+        self.feature_history: int = 300 # the frames for keep features Default: 50
 
         self.buffer_size: int = int(frame_rate / 30.0 * self.track_buffer)
         self.max_time_lost: int = self.buffer_size
@@ -1157,7 +1159,8 @@ class BoTSORT(object):
                     tlwh=STrack.tlbr_to_tlwh(np.asarray([box.x1,box.y1,box.x2,box.y2])),
                     score=box.score,
                     classid=box.classid,
-                    feature=base_feature
+                    feature=base_feature,
+                    feature_history=self.feature_history
                 ) for box, base_feature in zip(boxes, current_features) if box.score > self.track_high_thresh
             ]
             if len(boxes) != len(current_stracks) and len(current_stracks) > 0 and len(current_similarities) > 0:
@@ -1175,7 +1178,8 @@ class BoTSORT(object):
                     tlwh=STrack.tlbr_to_tlwh(np.asarray([box.x1,box.y1,box.x2,box.y2])),
                     score=box.score,
                     classid=box.classid,
-                    feature=base_feature
+                    feature=base_feature,
+                    feature_history=self.feature_history
                 ) for box, base_feature in zip(boxes, current_features) if box.score <= self.track_high_thresh and box.score >= self.track_low_thresh
             ]
 
