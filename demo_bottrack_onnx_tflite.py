@@ -448,6 +448,8 @@ class STrack(BaseTrack):
         self.alpha = 0.9
 
     def update_features(self, feature: np.ndarray):
+        # Skip processing because it has already been
+        # normalized in the post-processing process of ONNX.
         # feature /= np.linalg.norm(feature)
         self.curr_feature = feature
         if self.smooth_feature is None:
