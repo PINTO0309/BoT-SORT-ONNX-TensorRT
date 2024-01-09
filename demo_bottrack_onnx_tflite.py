@@ -448,7 +448,7 @@ class STrack(BaseTrack):
         self.alpha = 0.9
 
     def update_features(self, feature: np.ndarray):
-        feature /= np.linalg.norm(feature)
+        # feature /= np.linalg.norm(feature)
         self.curr_feature = feature
         if self.smooth_feature is None:
             self.smooth_feature = feature
