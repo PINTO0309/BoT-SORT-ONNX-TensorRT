@@ -1073,7 +1073,7 @@ class BoTSORT(object):
 
         self.frame_id = 0
 
-        self.track_high_thresh: float = 0.6 # tracking confidence threshold Default: 0.6
+        self.track_high_thresh: float = 0.40 # tracking confidence threshold Default: 0.6
         self.track_low_thresh: float = 0.1 # lowest detection threshold valid for tracks Default: 0.1
         self.new_track_thresh: float = 0.9 # new track thresh Default: 0.7
         self.match_thresh: float = 0.8 # matching threshold for tracking Default: 0.8
@@ -1173,7 +1173,7 @@ class BoTSORT(object):
                 ], dtype=np.float32)
                 current_similarities = current_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
             elif len(current_stracks) == 0 and len(current_similarities) > 0:
-                current_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
+                pass
             elif len(current_stracks) > 0 and len(current_similarities) == 0:
                 current_similarities = np.zeros([0, len(current_stracks)], dtype=np.float32)
             low_score_current_stracks: List[STrack] = [
@@ -1193,8 +1193,14 @@ class BoTSORT(object):
         # First association, with high score detection boxes
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
-        emb_dists = current_similarities
-        emb_dists[emb_dists > self.appearance_thresh] = 1.0
+        emb_dists = 1.0 - current_similarities
+        emb_dists_mask = emb_dists > self.appearance_thresh
+        emb_dists[emb_dists_mask] = 1.0
+        # Improved stability when returning from out-of-view angle.
+        # if the COS distance is smaller than the default value,
+        # the IoU distance judgment result is ignored and priority
+        # is given to the COS distance judgment result.
+        ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
         emb_dists[ious_dists_mask] = 1.0
         dists = np.minimum(ious_dists, emb_dists)
 
@@ -1241,7 +1247,7 @@ class BoTSORT(object):
         unconfirmed_boxes_features = \
             np.asarray([unconfirmed_box.curr_feature for unconfirmed_box in unconfirmed_boxes], dtype=np.float32) \
                 if len(unconfirmed_boxes) > 0 else np.zeros([0, self.encoder.feature_size], dtype=np.float32)
-        emb_dists = np.maximum(0.0, np.matmul(unconfirmed_strack_curr_features, unconfirmed_boxes_features.transpose(1, 0)))
+        emb_dists = 1.0 - np.maximum(0.0, np.matmul(unconfirmed_strack_curr_features, unconfirmed_boxes_features.transpose(1, 0)))
         emb_dists[emb_dists > self.appearance_thresh] = 1.0
         emb_dists[ious_dists_mask] = 1.0
         dists = np.minimum(ious_dists, emb_dists)
