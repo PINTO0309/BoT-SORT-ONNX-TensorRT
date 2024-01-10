@@ -20,7 +20,6 @@ import numpy as np
 import scipy.linalg
 from enum import Enum
 from collections import OrderedDict, deque
-from dataclasses import dataclass
 from argparse import ArgumentParser
 from typing import Tuple, Optional, List, Dict
 import importlib.util
@@ -36,6 +35,18 @@ ONNX_TRTENGINE_SETS = {
         'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_0_0_fp16_sm86.engine',
         'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.engine',
         'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.profile',
+    ],
+    'retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx': [
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_0_0_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_0_0_fp16_sm86.profile',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_1_1_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_1_1_fp16_sm86.profile',
+    ],
+    'face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx': [
+        'TensorrtExecutionProvider_TRTKernel_graph_tf2onnx_2180071764421166639_0_0_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_tf2onnx_2180071764421166639_0_0_fp16_sm86.profile',
+        'TensorrtExecutionProvider_TRTKernel_graph_tf2onnx_2180071764421166639_1_1_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_tf2onnx_2180071764421166639_1_1_fp16_sm86.profile',
     ],
     'mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx': [
         'TensorrtExecutionProvider_TRTKernel_graph_main_graph_377269473329240331_0_0_fp16_sm86.engine',
@@ -76,14 +87,34 @@ class Color(Enum):
     def __call__(self, s):
         return str(self) + str(s) + str(Color.RESET)
 
-@dataclass(frozen=False)
-class Box():
-    classid: int
-    score: float
-    x1: int
-    y1: int
-    x2: int
-    y2: int
+class Box(ABC):
+    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+        self.classid: int = classid
+        self.score: float = score
+        self.x1: int = x1
+        self.y1: int = y1
+        self.x2: int = x2
+        self.y2: int = y2
+        self.cx: int = cx
+        self.cy: int = cy
+        self.is_used: bool = is_used
+
+class Body(Box):
+    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, head: Box, hand1: Box, hand2: Box):
+        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
+        self.head: Head = head
+        self.hand1: Hand = hand1
+        self.hand2: Hand = hand2
+
+class Head(Box):
+    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, face: Box, face_landmarks: np.ndarray):
+        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
+        self.face: Box = face
+        self.face_landmarks: np.ndarray = face_landmarks
+
+class Hand(Box):
+    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
 
 class KalmanFilter(object):
     """
@@ -365,7 +396,8 @@ class BaseTrack(object):
 
     history = OrderedDict()
     features = []
-    curr_feature = None
+    body_curr_feature = None
+    face_curr_feature = None
     score = 0
     start_frame = 0
     frame_id = 0
@@ -408,7 +440,7 @@ class BaseTrack(object):
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh: np.ndarray, score: float, classid: int, feature_history: int, feature: np.ndarray=None):
+    def __init__(self, tlwh: np.ndarray, score: float, feature_history: int, body_feature: np.ndarray=None, face_feature: np.ndarray=None):
         """STrack
 
         Parameters
@@ -419,13 +451,13 @@ class STrack(BaseTrack):
         score: float
             Object detection score.
 
-        classid: int
-            Class ID.
-
         feature_history: int
             Number of features to be retained in history.
 
-        feature: Optional[np.ndarray]
+        body_feature: Optional[np.ndarray]
+            Features obtained from the feature extractor.
+
+        face_feature: Optional[np.ndarray]
             Features obtained from the feature extractor.
         """
         # wait activate
@@ -437,27 +469,46 @@ class STrack(BaseTrack):
 
         self.score = score
         self.tracklet_len = 0
-        self.classid = classid
-
-        self.smooth_feature = None
-        self.curr_feature = None
-        if feature is not None:
-            self.update_features(feature)
-        self.features = deque([], maxlen=feature_history)
-        self.feature_history = feature_history
         self.alpha = 0.9
+        self.feature_history = feature_history
 
-    def update_features(self, feature: np.ndarray):
+        # Body features
+        self.body_smooth_feature = None
+        self.body_curr_feature = None
+        self.body_features = deque([], maxlen=feature_history)
+        if body_feature is not None:
+            self.update_body_features(body_feature)
+
+        # Face features
+        self.face_smooth_feature = None
+        self.face_curr_feature = None
+        self.face_features = deque([], maxlen=feature_history)
+        if face_feature is not None:
+            self.update_face_features(face_feature)
+
+    def update_body_features(self, feature: np.ndarray):
         # Skip processing because it has already been
         # normalized in the post-processing process of ONNX.
         # feature /= np.linalg.norm(feature)
-        self.curr_feature = feature
-        if self.smooth_feature is None:
-            self.smooth_feature = feature
+        self.body_curr_feature = feature
+        if self.body_smooth_feature is None:
+            self.body_smooth_feature = feature
         else:
-            self.smooth_feature = self.alpha * self.smooth_feature + (1 - self.alpha) * feature
-        self.features.append(feature)
-        self.smooth_feature /= np.linalg.norm(self.smooth_feature)
+            self.body_smooth_feature = self.alpha * self.body_smooth_feature + (1 - self.alpha) * feature
+        self.body_features.append(feature)
+        self.body_smooth_feature /= np.linalg.norm(self.body_smooth_feature)
+
+    def update_face_features(self, feature: np.ndarray):
+        # Skip processing because it has already been
+        # normalized in the post-processing process of ONNX.
+        # feature /= np.linalg.norm(feature)
+        self.face_curr_feature = feature
+        if self.face_smooth_feature is None:
+            self.face_smooth_feature = feature
+        else:
+            self.face_smooth_feature = self.alpha * self.face_smooth_feature + (1 - self.alpha) * feature
+        self.face_features.append(feature)
+        self.face_smooth_feature /= np.linalg.norm(self.face_smooth_feature)
 
     def predict(self):
         mean_state = self.mean.copy()
@@ -516,8 +567,10 @@ class STrack(BaseTrack):
     def re_activate(self, new_track: STrack, frame_id: int, new_id: bool=False):
 
         self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_track.tlwh))
-        if new_track.curr_feature is not None:
-            self.update_features(new_track.curr_feature)
+        if new_track.body_curr_feature is not None:
+            self.update_body_features(new_track.body_curr_feature)
+        if new_track.face_curr_feature is not None:
+            self.update_face_features(new_track.face_curr_feature)
         self.tracklet_len = 0
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -541,8 +594,10 @@ class STrack(BaseTrack):
 
         self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh))
 
-        if new_track.curr_feature is not None:
-            self.update_features(new_track.curr_feature)
+        if new_track.body_curr_feature is not None:
+            self.update_body_features(new_track.body_curr_feature)
+        if new_track.face_curr_feature is not None:
+            self.update_face_features(new_track.face_curr_feature)
 
         self.state = TrackState.Tracked
         self.is_activated = True
@@ -786,7 +841,7 @@ class YOLOX(AbstractModel):
         self,
         *,
         runtime: Optional[str] = 'onnx',
-        model_path: Optional[str] = 'yolox_n_body_head_hand_post_0461_0.4428_1x3x256x320_float32.tflite',
+        model_path: Optional[str] = 'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx',
         class_score_th: Optional[float] = 0.35,
         providers: Optional[List] = None,
     ):
@@ -938,6 +993,8 @@ class YOLOX(AbstractModel):
                     y_min = int(max(0, box[4]) * image_height / self._input_shapes[0][self._h_index])
                     x_max = int(min(box[5], self._input_shapes[0][self._w_index]) * image_width / self._input_shapes[0][self._w_index])
                     y_max = int(min(box[6], self._input_shapes[0][self._h_index]) * image_height / self._input_shapes[0][self._h_index])
+                    cx = x_min // x_max
+                    cy = y_min // y_max
                     result_boxes.append(
                         Box(
                             classid=int(box[1]),
@@ -946,6 +1003,9 @@ class YOLOX(AbstractModel):
                             y1=y_min,
                             x2=x_max,
                             y2=y_max,
+                            cx=cx,
+                            cy=cy,
+                            is_used=False,
                         )
                     )
 
@@ -986,7 +1046,7 @@ class FastReID(AbstractModel):
         *,
         base_images: List[np.ndarray],
         target_features: List[np.ndarray]
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """FastReID
 
         Parameters
@@ -1024,7 +1084,7 @@ class FastReID(AbstractModel):
         self,
         *,
         base_images: List[np.ndarray],
-    ) -> Tuple[np.ndarray, int, int]:
+    ) -> np.ndarray:
         """_preprocess
 
         Parameters
@@ -1063,8 +1123,289 @@ class FastReID(AbstractModel):
         resized_base_images_np = resized_base_images_np.astype(self._input_dtypes[0])
         return resized_base_images_np
 
+class RetinaFace(AbstractModel):
+    def __init__(
+        self,
+        *,
+        runtime: Optional[str] = 'onnx',
+        model_path: Optional[str] = 'retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx',
+        class_score_th: Optional[float] = 0.15,
+        providers: Optional[List] = None,
+    ):
+        """RetinaFace
+
+        Parameters
+        ----------
+        runtime: Optional[str]
+            Runtime for RetinaFace. Default: onnx
+
+        model_path: Optional[str]
+            ONNX/TFLite file path for RetinaFace
+
+        class_score_th: Optional[float]
+            Score threshold. Default: 0.35
+
+        providers: Optional[List]
+            Providers for ONNXRuntime.
+        """
+        super().__init__(
+            runtime=runtime,
+            model_path=model_path,
+            class_score_th=class_score_th,
+            mean=np.asarray([104, 117, 123], dtype=np.float32),
+            providers=providers,
+        )
+
+    def __call__(
+        self,
+        image: np.ndarray,
+        head_boxes: List[Head],
+    ) -> List[Head]:
+        """
+
+        Parameters
+        ----------
+        image: np.ndarray
+            Entire image
+
+        head_boxes: List[Head]
+            Head boxes
+
+        Returns
+        -------
+        head_face_boxes: List[Head]
+            Head & Face boxes
+        """
+        temp_image = copy.deepcopy(image)
+        temp_head_boxes = copy.deepcopy(head_boxes)
+        # PreProcess
+        inferece_images = \
+            self._preprocess(
+                image=temp_image,
+                boxes=temp_head_boxes,
+            )
+        # Inference
+        outputs = super().__call__(input_datas=[inferece_images])
+        batchno_classid_score_x1y1x2y2_landms = outputs[0]
+        # PostProcess
+        head_face_boxes = \
+            self._postprocess(
+                face_boxes=batchno_classid_score_x1y1x2y2_landms,
+                head_boxes=temp_head_boxes,
+            )
+        return head_face_boxes
+
+    def _preprocess(
+        self,
+        image: np.ndarray,
+        boxes: List[Head],
+        swap: Optional[Tuple[int,int,int,int]] = (0, 3, 1, 2),
+    ) -> np.ndarray:
+        """_preprocess
+
+        Parameters
+        ----------
+        image: np.ndarray
+            Entire image
+
+        swap: tuple
+
+        Returns
+        -------
+        resized_image: np.ndarray
+            Resized and normalized image.
+        """
+        cropped_boxes = [image[box.y1:box.y2, box.x1:box.x2, :] for box in boxes]
+        # Normalization + BGR->RGB
+        resized_image_list: List[np.ndarray] = []
+        for cropped_box in cropped_boxes:
+            h, w, c = cropped_box.shape
+            if h > 0 and w > 0:
+                resized_image = cv2.resize(
+                    cropped_box,
+                    (
+                        int(self._input_shapes[0][self._w_index]),
+                        int(self._input_shapes[0][self._h_index]),
+                    )
+                )
+                resized_image = resized_image[..., ::-1] # BGR->RGB
+                resized_image_list.append(resized_image)
+        resized_images = np.asarray(resized_image_list, dtype=self._input_dtypes[0])
+        resized_images = resized_images.transpose(swap)
+        resized_images = (resized_images - self._mean)
+        return resized_images
+
+    def _postprocess(
+        self,
+        face_boxes: np.ndarray,
+        head_boxes: List[Head],
+    ) -> List[Head]:
+        """_postprocess
+
+        Parameters
+        ----------
+        face_boxes: np.ndarray
+            float32[N, 7]
+
+        head_boxes: List[Head]
+
+        Returns
+        -------
+        head_face_boxes: List[Head]
+            Head & Face boxes
+        """
+        if len(face_boxes) > 0:
+            scores = face_boxes[:, 2:3]
+            keep_idxs = scores[:, 0] > self._class_score_th
+            scores_keep = scores[keep_idxs, :]
+            boxes_keep = face_boxes[keep_idxs, :]
+            if len(boxes_keep) > 0:
+                for box, score in zip(boxes_keep, scores_keep):
+                    batchno = int(box[0])
+                    head_w = abs(head_boxes[batchno].x2 - head_boxes[batchno].x1)
+                    head_h = abs(head_boxes[batchno].y2 - head_boxes[batchno].y1)
+                    x_min = int(max(0, box[3]) * head_w / self._input_shapes[0][self._w_index]) + head_boxes[batchno].x1
+                    y_min = int(max(0, box[4]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
+                    x_max = int(min(box[5], self._input_shapes[0][self._w_index]) * head_w / self._input_shapes[0][self._w_index]) + head_boxes[batchno].x1
+                    y_max = int(min(box[6], self._input_shapes[0][self._h_index]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
+                    cx = x_min // x_max
+                    cy = y_min // y_max
+                    landmarks: np.ndarray = box[7:]
+                    landmarks = landmarks.reshape(-1, 2).astype(np.int32)
+                    landmarks[:, 0] = landmarks[:, 0] * head_w / self._input_shapes[0][self._w_index] + head_boxes[batchno].x1
+                    landmarks[:, 1] = landmarks[:, 1] * head_h / self._input_shapes[0][self._h_index] + head_boxes[batchno].y1
+                    head_boxes[batchno].face = \
+                        Box(
+                            classid=3, # Face
+                            score=float(score),
+                            x1=x_min,
+                            y1=y_min,
+                            x2=x_max,
+                            y2=y_max,
+                            cx=cx,
+                            cy=cy,
+                            is_used=False,
+                        )
+                    head_boxes[batchno].face_landmarks = landmarks
+        return head_boxes
+
+class FaceReidentificationRetail0095(AbstractModel):
+    def __init__(
+        self,
+        *,
+        runtime: Optional[str] = 'onnx',
+        model_path: Optional[str] = 'face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx',
+        providers: Optional[List] = None,
+    ):
+        """FaceReidentificationRetail0095
+
+        Parameters
+        ----------
+        runtime: Optional[str]
+            Runtime for FaceReidentificationRetail0095. Default: onnx
+
+        model_path: Optional[str]
+            ONNX/TFLite file path for FaceReidentificationRetail0095
+
+        providers: Optional[List]
+            Providers for ONNXRuntime.
+        """
+        super().__init__(
+            runtime=runtime,
+            model_path=model_path,
+            providers=providers,
+        )
+        self.feature_size = self._output_shapes[0][-1]
+
+    def __call__(
+        self,
+        *,
+        base_images: List[np.ndarray],
+        target_features: List[np.ndarray]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """FaceReidentificationRetail0095
+
+        Parameters
+        ----------
+        base_image: List[np.ndarray]
+            Object images [N, 3, H, W]
+
+        target_features: List[np.ndarray]
+            features [M, 256]
+
+        Returns
+        -------
+        similarities: np.ndarray
+            features [N, M]
+
+        base_features: np.ndarray
+            features [M, 256]
+        """
+        temp_base_images = copy.deepcopy(base_images)
+        temp_target_features = copy.deepcopy(target_features)
+
+        # PreProcess
+        temp_base_images = \
+            self._preprocess(
+                base_images=temp_base_images,
+            )
+
+        # Inference
+        outputs = super().__call__(input_datas=[temp_base_images, temp_target_features])
+        similarities = outputs[0]
+        base_features = outputs[1]
+        return similarities, base_features
+
+    def _preprocess(
+        self,
+        *,
+        base_images: List[np.ndarray],
+    ) -> np.ndarray:
+        """_preprocess
+
+        Parameters
+        ----------
+        base_images: List[np.ndarray]
+            Entire image
+
+        swap: tuple
+            HWC to CHW: (2,0,1)
+            CHW to HWC: (1,2,0)
+            HWC to HWC: (0,1,2)
+            CHW to CHW: (0,1,2)
+
+        Returns
+        -------
+        stacked_images_N: np.ndarray
+            Resized and normalized image. [N, 3, H, W]
+        """
+        # Resize + Transpose
+        resized_base_images_np: np.ndarray = None
+        resized_base_images_list: List[np.ndarray] = []
+        for base_image in base_images:
+            resized_base_image: np.ndarray = \
+                cv2.resize(
+                    src=base_image,
+                    dsize=(
+                        int(self._input_shapes[0][self._w_index]),
+                        int(self._input_shapes[0][self._h_index]),
+                    )
+                )
+            resized_base_image = resized_base_image.transpose(self._swap)
+            resized_base_images_list.append(resized_base_image)
+        resized_base_images_np = np.asarray(resized_base_images_list)
+        resized_base_images_np = resized_base_images_np.astype(self._input_dtypes[0])
+        return resized_base_images_np
+
 class BoTSORT(object):
-    def __init__(self, object_detection_model, feature_extractor_model, track_target_classes: List[int], frame_rate: int=30):
+    def __init__(
+        self,
+        object_detection_model,
+        face_detection_model,
+        body_feature_extractor_model,
+        face_feature_extractor_model,
+        frame_rate: int=30,
+    ):
 
         self.tracked_stracks: List[STrack] = []
         self.lost_stracks: List[STrack] = []
@@ -1079,24 +1420,27 @@ class BoTSORT(object):
         self.match_thresh: float = 0.8 # matching threshold for tracking Default: 0.8
         self.track_buffer: int = 300 # the frames for keep lost tracks Default: 30
         self.feature_history: int = 300 # the frames for keep features Default: 50
-
+        self.proximity_thresh: float = 0.5 # threshold for rejecting low overlap reid matches Default: 0.5
+        self.appearance_thresh: float = 0.25 # threshold for rejecting low appearance similarity reid matches Default: 0.25
         self.buffer_size: int = int(frame_rate / 30.0 * self.track_buffer)
         self.max_time_lost: int = self.buffer_size
         self.kalman_filter: KalmanFilter = KalmanFilter()
 
         # Object detection module
         self.detector: YOLOX = object_detection_model
-        self.detections: List[Box] = []
-        self.strack_features: List[np.ndarray] = []
 
-        # ReID module
-        self.proximity_thresh: float = 0.5 # threshold for rejecting low overlap reid matches Default: 0.5
-        self.appearance_thresh: float = 0.25 # threshold for rejecting low appearance similarity reid matches Default: 0.25
-        self.encoder: FastReID = feature_extractor_model
+        # Face detection module
+        self.face_detector: RetinaFace = face_detection_model
 
-        self.track_target_classes = track_target_classes
+        # BodyReID module
+        self.body_encoder: FastReID = body_feature_extractor_model
+        self.body_strack_features: List[np.ndarray] = []
 
-    def update(self, image: np.ndarray):
+        # FaceReID module
+        self.face_encoder: FaceReidentificationRetail0095 = face_feature_extractor_model
+        self.face_strack_features: List[np.ndarray] = []
+
+    def update(self, image: np.ndarray) -> Tuple[List[STrack], List[Body]]:
         self.frame_id += 1
         activated_starcks: List[STrack] = []
         refind_stracks: List[STrack] = []
@@ -1107,8 +1451,90 @@ class BoTSORT(object):
 
         # Object detection =========================================================
         detected_boxes: List[Box] = self.detector(image=debug_image)
-        boxes = copy.deepcopy([box for box in detected_boxes if box.classid in self.track_target_classes])
-        non_tracked_boxes = copy.deepcopy([box for box in detected_boxes if box.classid not in self.track_target_classes])
+
+        # Generate Body object
+        body_boxes = [
+            Body(
+                classid=box.classid,
+                score=box.score,
+                x1=box.x1,
+                y1=box.y1,
+                x2=box.x2,
+                y2=box.y2,
+                cx=box.cx,
+                cy=box.cy,
+                head=None,
+                hand1=None,
+                hand2=None,
+                is_used=False,
+            ) for box in detected_boxes if box.classid == 0 # Body
+        ]
+
+        # Generate Head object
+        head_boxes: List[Head] = [
+            Head(
+                classid=box.classid,
+                score=box.score,
+                x1=box.x1,
+                y1=box.y1,
+                x2=box.x2,
+                y2=box.y2,
+                cx=box.cx,
+                cy=box.cy,
+                face=None,
+                face_landmarks=None,
+                is_used=False,
+            ) for box in detected_boxes if box.classid == 1 # Head
+        ]
+
+        hand_boxes: List[Hand] = [
+            Hand(
+                classid=box.classid,
+                score=box.score,
+                x1=box.x1,
+                y1=box.y1,
+                x2=box.x2,
+                y2=box.y2,
+                cx=box.cx,
+                cy=box.cy,
+                is_used=False,
+            ) for box in detected_boxes if box.classid == 2 # Hand
+        ]
+
+        # Generate Head_Face object
+        head_face_boxes: List[Head] = []
+        if len(head_boxes) > 0:
+            head_face_boxes = self.face_detector(image=debug_image, head_boxes=head_boxes)
+
+        # Associate Head_Face object to Body object
+        if len(head_face_boxes) > 0:
+            for body_box in body_boxes:
+                closest_head_face_box: Box = \
+                    find_most_relevant_object(
+                        base_obj=body_box,
+                        target_objs=head_face_boxes,
+                    )
+                if closest_head_face_box is not None:
+                    body_box.head = closest_head_face_box
+
+        # Associate Hand object to Body object
+        if len(hand_boxes) > 0:
+            for body_box in body_boxes:
+                closest_hand_box1: Box = \
+                    find_most_relevant_object(
+                        base_obj=body_box,
+                        target_objs=hand_boxes,
+                    )
+                if closest_hand_box1 is not None:
+                    body_box.hand1 = closest_hand_box1
+
+                closest_hand_box2: Box = \
+                    find_most_relevant_object(
+                        base_obj=body_box,
+                        target_objs=hand_boxes,
+                    )
+                if closest_hand_box2 is not None:
+                    body_box.hand2 = closest_hand_box2
         # Object detection =========================================================
 
         # Add newly detected tracklets to tracked_stracks
@@ -1131,59 +1557,99 @@ class BoTSORT(object):
         # At the first calculation, the previous features are treated as all zeros.
         # similarities: [N, M]
         # current_features: [N, 2048]
-        person_images: List[np.ndarray] = [debug_image[box.y1:box.y2, box.x1:box.x2, :] for box in boxes]
+        person_images: List[np.ndarray] = [
+            debug_image[box.y1:box.y2, box.x1:box.x2, :] for box in body_boxes
+        ]
+        face_images: List[np.ndarray] = [
+            debug_image[body_box.head.face.y1:body_box.head.face.y2, body_box.head.face.x1:body_box.head.face.x2, :] \
+                if body_box.head is not None and body_box.head.face is not None \
+                    else np.zeros([d if isinstance(d, int) else 1 for d in self.face_encoder._input_shapes[0][1:]], dtype=np.float32).transpose(1,2,0) for body_box in body_boxes
+        ]
 
-        strack_features: List[np.ndarray] = []
         current_stracks: List[STrack] = []
-        similarities: np.ndarray = None
-        current_features: np.ndarray = None
 
-        strack_features = [
-            strack.curr_feature for strack in strack_pool
-        ] if len(strack_pool) > 0 else np.zeros([0, self.encoder.feature_size], dtype=np.float32)
+        # Body feature extraction
+        body_strack_features: List[np.ndarray] = []
+        body_similarities: np.ndarray = None
+        body_current_features: np.ndarray = None
+        body_strack_features = [
+            strack.body_curr_feature for strack in strack_pool
+        ] if len(strack_pool) > 0 else np.zeros([0, self.body_encoder.feature_size], dtype=np.float32)
         if len(person_images) > 0:
-            similarities_and_current_features: Tuple[np.ndarray, np.ndarray] = \
-                self.encoder(
+            body_similarities_and_current_features: Tuple[np.ndarray, np.ndarray] = \
+                self.body_encoder(
                     base_images=person_images,
-                    target_features=strack_features,
+                    target_features=body_strack_features,
                 )
-            similarities = similarities_and_current_features[0]
-            similarities = similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
-            current_features = similarities_and_current_features[1]
+            body_similarities = body_similarities_and_current_features[0]
+            body_similarities = body_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
+            body_current_features = body_similarities_and_current_features[1]
         else:
-            similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
-            current_features = np.zeros([0, self.encoder.feature_size], dtype=np.float32)
+            body_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
+            body_current_features = np.zeros([0, self.body_encoder.feature_size], dtype=np.float32)
+
+        # Face feature extraction
+        face_strack_features: List[np.ndarray] = []
+        face_similarities: np.ndarray = None
+        face_current_features: np.ndarray = None
+        face_strack_features = [
+            strack.face_curr_feature for strack in strack_pool
+        ] if len(strack_pool) > 0 else np.zeros([0, self.face_encoder.feature_size], dtype=np.float32)
+        if len(face_images) > 0:
+            face_similarities_and_current_features: Tuple[np.ndarray, np.ndarray] = \
+                self.face_encoder(
+                    base_images=face_images,
+                    target_features=face_strack_features,
+                )
+            face_similarities = face_similarities_and_current_features[1]
+            face_similarities = face_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
+            face_current_features = face_similarities_and_current_features[0]
+        else:
+            face_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
+            face_current_features = np.zeros([0, self.face_encoder.feature_size], dtype=np.float32)
+
         current_stracks: List[STrack] = []
-        current_similarities: np.ndarray = copy.deepcopy(similarities)
+        body_current_similarities: np.ndarray = copy.deepcopy(body_similarities)
+        face_current_similarities: np.ndarray = copy.deepcopy(face_similarities)
         low_score_current_stracks: List[STrack] = []
-        if len(boxes) > 0:
+        if len(body_boxes) > 0:
             current_stracks: List[STrack] = [
                 STrack(
-                    tlwh=STrack.tlbr_to_tlwh(np.asarray([box.x1,box.y1,box.x2,box.y2])),
-                    score=box.score,
-                    classid=box.classid,
-                    feature=base_feature,
-                    feature_history=self.feature_history
-                ) for box, base_feature in zip(boxes, current_features) if box.score > self.track_high_thresh
+                    tlwh=STrack.tlbr_to_tlwh(np.asarray([body.x1, body.y1, body.x2, body.y2])),
+                    score=body.score,
+                    body_feature=body_base_feature,
+                    face_feature=face_current_feature,
+                    feature_history=self.feature_history,
+                ) for body, body_base_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score > self.track_high_thresh
             ]
-            if len(boxes) != len(current_stracks) and len(current_stracks) > 0 and len(current_similarities) > 0:
-                current_similarities = current_similarities.transpose(1, 0) # M: stracks N: boxes, [M, N] -> [N, M]
-                current_similarities = np.asarray([
-                    current_similarity for box, current_similarity in zip(boxes, current_similarities) if box.score > self.track_high_thresh
+            if len(body_boxes) != len(current_stracks) and len(current_stracks) > 0 and len(body_current_similarities) > 0:
+                # body
+                body_current_similarities = body_current_similarities.transpose(1, 0) # M: stracks N: boxes, [M, N] -> [N, M]
+                body_current_similarities = np.asarray([
+                    current_similarity for body, current_similarity in zip(body_boxes, body_current_similarities) if body.score > self.track_high_thresh
                 ], dtype=np.float32)
-                current_similarities = current_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
-            elif len(current_stracks) == 0 and len(current_similarities) > 0:
+                body_current_similarities = body_current_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
+                # face
+                face_current_similarities = face_current_similarities.transpose(1, 0) # M: stracks N: boxes, [M, N] -> [N, M]
+                face_current_similarities = np.asarray([
+                    current_similarity for body, current_similarity in zip(body_boxes, face_current_similarities) if body.score > self.track_high_thresh
+                ], dtype=np.float32)
+                face_current_similarities = face_current_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
+            elif len(current_stracks) == 0 and len(body_current_similarities) > 0:
                 pass
-            elif len(current_stracks) > 0 and len(current_similarities) == 0:
-                current_similarities = np.zeros([0, len(current_stracks)], dtype=np.float32)
+            elif len(current_stracks) > 0 and len(body_current_similarities) == 0:
+                # body
+                body_current_similarities = np.zeros([0, len(current_stracks)], dtype=np.float32)
+                # face
+                face_current_similarities = np.zeros([0, len(current_stracks)], dtype=np.float32)
             low_score_current_stracks: List[STrack] = [
                 STrack(
-                    tlwh=STrack.tlbr_to_tlwh(np.asarray([box.x1,box.y1,box.x2,box.y2])),
-                    score=box.score,
-                    classid=box.classid,
-                    feature=base_feature,
+                    tlwh=STrack.tlbr_to_tlwh(np.asarray([body.x1, body.y1, body.x2, body.y2])),
+                    score=body.score,
+                    body_feature=body_base_feature,
+                    face_feature=face_current_feature,
                     feature_history=self.feature_history
-                ) for box, base_feature in zip(boxes, current_features) if box.score <= self.track_high_thresh and box.score >= self.track_low_thresh
+                ) for body, body_base_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score <= self.track_high_thresh and body.score >= self.track_low_thresh
             ]
 
         # Calibration by camera motion is not performed.
@@ -1193,16 +1659,24 @@ class BoTSORT(object):
         # First association, with high score detection boxes
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
-        emb_dists = 1.0 - current_similarities
-        emb_dists_mask = emb_dists > self.appearance_thresh
-        emb_dists[emb_dists_mask] = 1.0
+
+        body_emb_dists = 1.0 - body_current_similarities
+        body_emb_dists_mask = body_emb_dists > self.appearance_thresh
+        body_emb_dists[body_emb_dists_mask] = 1.0
+
+        face_emb_dists = 1.0 - face_current_similarities
+        face_emb_dists_mask = face_emb_dists > self.appearance_thresh
+        face_emb_dists[face_emb_dists_mask] = 1.0
+
         # Improved stability when returning from out-of-view angle.
         # if the COS distance is smaller than the default value,
         # the IoU distance judgment result is ignored and priority
         # is given to the COS distance judgment result.
-        ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
-        emb_dists[ious_dists_mask] = 1.0
-        dists = np.minimum(ious_dists, emb_dists)
+        ious_dists_mask = np.logical_and(body_emb_dists_mask, ious_dists_mask)
+        body_emb_dists[ious_dists_mask] = 1.0
+
+        body_face_dists = np.minimum(body_emb_dists, face_emb_dists)
+        dists = np.minimum(ious_dists, body_face_dists)
 
         matches, u_track, u_detection = linear_assignment(dists, thresh=self.match_thresh)
 
@@ -1242,11 +1716,11 @@ class BoTSORT(object):
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
         unconfirmed_strack_curr_features = \
-            np.asarray([unconfirmed_strack.curr_feature for unconfirmed_strack in unconfirmed_stracks], dtype=np.float32) \
-                if len(unconfirmed_stracks) > 0 else np.zeros([0, self.encoder.feature_size], dtype=np.float32)
+            np.asarray([unconfirmed_strack.body_curr_feature for unconfirmed_strack in unconfirmed_stracks], dtype=np.float32) \
+                if len(unconfirmed_stracks) > 0 else np.zeros([0, self.body_encoder.feature_size], dtype=np.float32)
         unconfirmed_boxes_features = \
-            np.asarray([unconfirmed_box.curr_feature for unconfirmed_box in unconfirmed_boxes], dtype=np.float32) \
-                if len(unconfirmed_boxes) > 0 else np.zeros([0, self.encoder.feature_size], dtype=np.float32)
+            np.asarray([unconfirmed_box.body_curr_feature for unconfirmed_box in unconfirmed_boxes], dtype=np.float32) \
+                if len(unconfirmed_boxes) > 0 else np.zeros([0, self.body_encoder.feature_size], dtype=np.float32)
         emb_dists = 1.0 - np.maximum(0.0, np.matmul(unconfirmed_strack_curr_features, unconfirmed_boxes_features.transpose(1, 0)))
         emb_dists[emb_dists > self.appearance_thresh] = 1.0
         emb_dists[ious_dists_mask] = 1.0
@@ -1286,8 +1760,7 @@ class BoTSORT(object):
         self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
         self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
-        output_stracks = [track for track in self.tracked_stracks]
-        return output_stracks, non_tracked_boxes
+        return self.tracked_stracks, body_boxes
 
 
 def joint_stracks(tlista: List[STrack], tlistb: List[STrack]):
@@ -1363,6 +1836,22 @@ def bbox_iou(atlbr: np.ndarray, btlbr: np.ndarray) -> float:
     iou = inter_area / float(area1 + area2 - inter_area)
     return iou
 
+def bbox_iou_by_box(base_obj: Box, target_obj: Box) -> float:
+    inter_xmin = max(base_obj.x1, target_obj.x1)
+    inter_ymin = max(base_obj.y1, target_obj.y1)
+    inter_xmax = min(base_obj.x2, target_obj.x2)
+    inter_ymax = min(base_obj.y2, target_obj.y2)
+    # If there is no overlap
+    if inter_xmax <= inter_xmin or inter_ymax <= inter_ymin:
+        return 0.0
+    # Calculate area of overlap and area of each bounding box
+    inter_area = (inter_xmax - inter_xmin) * (inter_ymax - inter_ymin)
+    area1 = (base_obj.x2 - base_obj.x1) * (base_obj.y2 - base_obj.y1)
+    area2 = (target_obj.x2 - target_obj.x1) * (target_obj.y2 - target_obj.y1)
+    # Calculate IoU
+    iou = inter_area / float(area1 + area2 - inter_area)
+    return iou
+
 def bbox_ious(atlbrs: List[np.ndarray], btlbrs: List[np.ndarray]) -> np.ndarray:
     """
     Compute cost based on IoU
@@ -1395,65 +1884,35 @@ def iou_distance(atracks: List[STrack], btracks: List[STrack]):
     cost_matrix = 1 - _ious
     return cost_matrix
 
-def gate_cost_matrix(kf: KalmanFilter, cost_matrix: np.ndarray, tracks: List[STrack], detections, only_position=False):
-    if cost_matrix.size == 0:
-        return cost_matrix
-    gating_dim = 2 if only_position else 4
-    gating_threshold = KalmanFilter.chi2inv95[gating_dim]
-    measurements = np.asarray([det.to_xywh() for det in detections])
-    for row, track in enumerate(tracks):
-        gating_distance = kf.gating_distance(
-            track.mean, track.covariance, measurements, only_position)
-        cost_matrix[row, gating_distance > gating_threshold] = np.inf
-    return cost_matrix
-
-def fuse_motion(kf: KalmanFilter, cost_matrix: np.ndarray, tracks: List[STrack], detections: List[STrack], only_position=False, lambda_=0.98):
-    if cost_matrix.size == 0:
-        return cost_matrix
-    gating_dim = 2 if only_position else 4
-    gating_threshold = KalmanFilter.chi2inv95[gating_dim]
-    measurements = np.asarray([det.to_xywh() for det in detections])
-    for row, track in enumerate(tracks):
-        gating_distance = kf.gating_distance(
-            track.mean, track.covariance, measurements, only_position, metric='maha')
-        cost_matrix[row, gating_distance > gating_threshold] = np.inf
-        cost_matrix[row] = lambda_ * cost_matrix[row] + (1 - lambda_) * gating_distance
-    return cost_matrix
-
-def fuse_iou(cost_matrix: np.ndarray, tracks: List[STrack], detections: List[STrack]):
-    if cost_matrix.size == 0:
-        return cost_matrix
-    reid_sim = 1 - cost_matrix
-    iou_dist = iou_distance(tracks, detections)
-    iou_sim = 1 - iou_dist
-    fuse_sim = reid_sim * (1 + iou_sim) / 2
-    det_scores = np.array([det.score for det in detections])
-    det_scores = np.expand_dims(det_scores, axis=0).repeat(cost_matrix.shape[0], axis=0)
-    fuse_cost = 1 - fuse_sim
-    return fuse_cost
-
-def fuse_score(cost_matrix: np.ndarray, detections: List[STrack]):
-    if cost_matrix.size == 0:
-        return cost_matrix
-    iou_sim = 1 - cost_matrix
-    det_scores = np.array([det.score for det in detections])
-    det_scores = np.expand_dims(det_scores, axis=0).repeat(cost_matrix.shape[0], axis=0)
-    fuse_sim = iou_sim * det_scores
-    fuse_cost = 1 - fuse_sim
-    return fuse_cost
-
-def gate(cost_matrix: np.ndarray, emb_cost):
-    """
-    :param tracks: list[STrack]
-    :param detections: list[BaseTrack]
-    :param metric:
-    :return: cost_matrix np.ndarray
-    """
-    if cost_matrix.size == 0:
-        return cost_matrix
-    index = emb_cost > 0.3
-    cost_matrix[index] = 1
-    return cost_matrix
+def find_most_relevant_object(
+    base_obj: Box,
+    target_objs: List[Box],
+) -> Box:
+    most_relevant_obj: Box = None
+    best_iou = 0.0
+    best_distance = float('inf')
+    for target_obj in target_objs:
+        if target_obj is not None and not target_obj.is_used:
+            # IoUの計算
+            iou: float = \
+                bbox_iou_by_box(
+                    base_obj=base_obj,
+                    target_obj=target_obj,
+                )
+            if iou > best_iou:
+                most_relevant_obj = target_obj
+                best_iou = iou
+                # baseの中心座標とtargetの中心座標のユークリッド距離を計算
+                best_distance = ((base_obj.cx - target_obj.cx)**2 + (base_obj.cy - target_obj.cy)**2)**0.5
+            elif iou == best_iou:
+                # baseの中心座標とtargetの中心座標のユークリッド距離を計算
+                distance = ((base_obj.cx - target_obj.cx)**2 + (base_obj.cy - target_obj.cy)**2)**0.5
+                if distance < best_distance:
+                    most_relevant_obj = target_obj
+                    best_distance = distance
+    if most_relevant_obj:
+        most_relevant_obj.is_used = True
+    return most_relevant_obj
 
 def is_parsable_to_int(s):
     try:
@@ -1514,6 +1973,50 @@ def get_nvidia_gpu_model() -> List[str]:
         print(f"Error: {e}")
         return []
 
+def get_cv_color(classid: int) -> Tuple[int, int, int]:
+    if classid == 0:
+        return (255, 0, 0) # Blue
+    elif classid == 1:
+        return (0, 255, 0) # Green
+    elif classid == 2:
+        return (0, 0, 255) # Red
+    elif classid == 3:
+        return (0,233,245) # Yellow
+    else:
+        return (255, 255, 255) # Black
+
+def draw_dashed_line(
+    image: np.ndarray,
+    pt1: Tuple[int, int],
+    pt2: Tuple[int, int],
+    color: Tuple[int, int, int],
+    thickness: int = 1,
+    dash_length: int = 10,
+):
+    """Function to draw a dashed line"""
+    dist = ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** 0.5
+    dashes = int(dist / dash_length)
+    for i in range(dashes):
+        start = [int(pt1[0] + (pt2[0] - pt1[0]) * i / dashes), int(pt1[1] + (pt2[1] - pt1[1]) * i / dashes)]
+        end = [int(pt1[0] + (pt2[0] - pt1[0]) * (i + 0.5) / dashes), int(pt1[1] + (pt2[1] - pt1[1]) * (i + 0.5) / dashes)]
+        cv2.line(image, tuple(start), tuple(end), color, thickness)
+
+def draw_dashed_rectangle(
+    image: np.ndarray,
+    top_left: Tuple[int, int],
+    bottom_right: Tuple[int, int],
+    color: Tuple[int, int, int],
+    thickness: int = 1,
+    dash_length: int = 10
+):
+    """Function to draw a dashed rectangle"""
+    tl_tr = (bottom_right[0], top_left[1])
+    bl_br = (top_left[0], bottom_right[1])
+    draw_dashed_line(image, top_left, tl_tr, color, thickness, dash_length)
+    draw_dashed_line(image, tl_tr, bottom_right, color, thickness, dash_length)
+    draw_dashed_line(image, bottom_right, bl_br, color, thickness, dash_length)
+    draw_dashed_line(image, bl_br, top_left, color, thickness, dash_length)
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(
@@ -1532,8 +2035,18 @@ def main():
         help='ONNX/TFLite file path for YOLOX.',
     )
     parser.add_argument(
-        '-fem',
-        '--feature_extractor_model',
+        '-fdm',
+        '--face_detection_model',
+        type=str,
+        default='retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx',
+        choices=[
+            'retinaface_mbn025_with_postprocess_Nx3x96x96_max001_th0.15.onnx',
+        ],
+        help='ONNX/TFLite file path for RetinaFace.',
+    )
+    parser.add_argument(
+        '-bfem',
+        '--body_feature_extractor_model',
         type=str,
         default='mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx',
         choices=[
@@ -1551,12 +2064,14 @@ def main():
         help='ONNX/TFLite file path for FastReID.',
     )
     parser.add_argument(
-        '-tc',
-        '--track_target_classes',
-        type=int,
-        nargs='+',
-        default=[0],
-        help='List of class IDs to be tracked. 0:Body, 1: Head, 2: Hand',
+        '-ffem',
+        '--face_feature_extractor_model',
+        type=str,
+        default='face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx',
+        choices=[
+            'face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx',
+        ],
+        help='ONNX/TFLite file path for FaceReID.',
     )
     parser.add_argument(
         '-v',
@@ -1586,12 +2101,18 @@ def main():
 
     # runtime check
     object_detection_model_file: str = args.object_detection_model
-    feature_extractor_model_file: str = args.feature_extractor_model
+    face_detection_model_file: str = args.face_detection_model
+    body_feature_extractor_model_file: str = args.body_feature_extractor_model
+    face_feature_extractor_model_file: str = args.face_feature_extractor_model
     object_detection_model_ext: str = os.path.splitext(object_detection_model_file)[1][1:].lower()
-    feature_extractor_model_ext: str = os.path.splitext(feature_extractor_model_file)[1][1:].lower()
+    face_detection_model_ext: str = os.path.splitext(face_detection_model_file)[1][1:].lower()
+    body_feature_extractor_model_ext: str = os.path.splitext(body_feature_extractor_model_file)[1][1:].lower()
+    face_feature_extractor_model_ext: str = os.path.splitext(face_feature_extractor_model_file)[1][1:].lower()
     runtime: str = None
-    if object_detection_model_ext != feature_extractor_model_ext:
-        print(Color.RED('ERROR: object_detection_model and feature_extractor_model must be files with the same extension.'))
+    if object_detection_model_ext != body_feature_extractor_model_ext \
+        or object_detection_model_ext != face_detection_model_ext \
+        or object_detection_model_ext != face_feature_extractor_model_ext:
+        print(Color.RED('ERROR: object_detection_model and face_detection_model and feature_extractor_model must be files with the same extension.'))
         sys.exit(0)
     if object_detection_model_ext == 'onnx':
         if not is_package_installed('onnxruntime'):
@@ -1633,8 +2154,8 @@ def main():
                     url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
                     download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
 
-    # Download reid onnx
-    weight_file = os.path.basename(feature_extractor_model_file)
+    # Download face detection onnx
+    weight_file = os.path.basename(face_detection_model_file)
     if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
         url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
         download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
@@ -1647,7 +2168,34 @@ def main():
                     url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
                     download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
 
-    track_target_classes: List[int] = args.track_target_classes
+    # Download BodyReID onnx
+    weight_file = os.path.basename(body_feature_extractor_model_file)
+    if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
+        download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
+    # Download BodyReID tensorrt engine
+    if default_supported_gpu_model:
+        trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
+        if trt_engine_files is not None:
+            for trt_engine_file in trt_engine_files:
+                if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, trt_engine_file)):
+                    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
+                    download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
+
+    # Download FaceReID onnx
+    weight_file = os.path.basename(face_feature_extractor_model_file)
+    if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
+        url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
+        download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
+    # Download FaceReID tensorrt engine
+    if default_supported_gpu_model:
+        trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
+        if trt_engine_files is not None:
+            for trt_engine_file in trt_engine_files:
+                if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, trt_engine_file)):
+                    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
+                    download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
+
     video: str = args.video
     execution_provider: str = args.execution_provider
     providers: List[Tuple[str, Dict] | str] = None
@@ -1680,17 +2228,31 @@ def main():
             model_path=object_detection_model_file,
             providers=providers,
         )
-    feature_extractor_model = \
+    face_detection_model = \
+        RetinaFace(
+            runtime=runtime,
+            model_path=face_detection_model_file,
+            class_score_th=0.85,
+            providers=providers,
+        )
+    body_feature_extractor_model = \
         FastReID(
             runtime=runtime,
-            model_path=feature_extractor_model_file,
+            model_path=body_feature_extractor_model_file,
+            providers=providers,
+        )
+    face_feature_extractor_model = \
+        FaceReidentificationRetail0095(
+            runtime=runtime,
+            model_path=face_feature_extractor_model_file,
             providers=providers,
         )
     botsort = \
         BoTSORT(
             object_detection_model=object_detection_model,
-            feature_extractor_model=feature_extractor_model,
-            track_target_classes=track_target_classes,
+            face_detection_model=face_detection_model,
+            body_feature_extractor_model=body_feature_extractor_model,
+            face_feature_extractor_model=face_feature_extractor_model,
             frame_rate=30,
         )
 
@@ -1721,19 +2283,13 @@ def main():
         debug_image_w = debug_image.shape[1]
 
         start_time = time.perf_counter()
-        stracks, boxes = botsort.update(image=debug_image)
+        stracks, body_boxes = botsort.update(image=debug_image)
         elapsed_time = time.perf_counter() - start_time
         cv2.putText(debug_image, f'{elapsed_time*1000:.2f} ms', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(debug_image, f'{elapsed_time*1000:.2f} ms', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1, cv2.LINE_AA)
 
         for strack in stracks:
-            color = (255,255,255)
-            if strack.classid == 0:
-                color = (255,0,0)
-            elif strack.classid == 1:
-                color = (0,0,255)
-            elif strack.classid == 2:
-                color = (0,255,0)
+            color = (255,0,0)
             cv2.rectangle(debug_image, (int(strack.tlbr[0]), int(strack.tlbr[1])), (int(strack.tlbr[2]), int(strack.tlbr[3])), (255,255,255), 2)
             cv2.rectangle(debug_image, (int(strack.tlbr[0]), int(strack.tlbr[1])), (int(strack.tlbr[2]), int(strack.tlbr[3])), color, 1)
             ptx = int(strack.tlbr[0]) if int(strack.tlbr[0])+50 < debug_image_w else debug_image_w-50
@@ -1741,19 +2297,26 @@ def main():
             cv2.putText(debug_image, f'{strack.track_id}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(debug_image, f'{strack.track_id}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
-        for box in boxes:
-            if box.classid not in track_target_classes:
-                color = (255,255,255)
-                if box.classid == 0:
-                    color = (255,0,0)
-                elif box.classid == 1:
-                    color = (168,87,167)
-                elif box.classid == 2:
-                    color = (0,255,0)
-                cv2.rectangle(debug_image, (box.x1, box.y1), (box.x2, box.y2), (255,255,255), 2)
-                cv2.rectangle(debug_image, (box.x1, box.y1), (box.x2, box.y2), color, 1)
-                ptx = box.x1 if box.x1+50 < debug_image_w else debug_image_w-50
-                pty = box.y1-10 if box.y1-25 > 0 else 20
+        for body_box in body_boxes:
+            if body_box.head is not None:
+                color = get_cv_color(body_box.head.classid)
+                cv2.rectangle(debug_image, (body_box.head.x1, body_box.head.y1), (body_box.head.x2, body_box.head.y2), (255,255,255), 2)
+                cv2.rectangle(debug_image, (body_box.head.x1, body_box.head.y1), (body_box.head.x2, body_box.head.y2), color, 1)
+
+                if body_box.head.face is not None:
+                    color = get_cv_color(body_box.head.face.classid)
+                    draw_dashed_rectangle(debug_image, (body_box.head.face.x1, body_box.head.face.y1), (body_box.head.face.x2, body_box.head.face.y2), (255,255,255), 2, 5)
+                    draw_dashed_rectangle(debug_image, (body_box.head.face.x1, body_box.head.face.y1), (body_box.head.face.x2, body_box.head.face.y2), color, 1, 5)
+
+            if body_box.hand1 is not None:
+                color = get_cv_color(body_box.hand1.classid)
+                cv2.rectangle(debug_image, (body_box.hand1.x1, body_box.hand1.y1), (body_box.hand1.x2, body_box.hand1.y2), (255,255,255), 2)
+                cv2.rectangle(debug_image, (body_box.hand1.x1, body_box.hand1.y1), (body_box.hand1.x2, body_box.hand1.y2), color, 1)
+
+            if body_box.hand2 is not None:
+                color = get_cv_color(body_box.hand2.classid)
+                cv2.rectangle(debug_image, (body_box.hand2.x1, body_box.hand2.y1), (body_box.hand2.x2, body_box.hand2.y2), (255,255,255), 2)
+                cv2.rectangle(debug_image, (body_box.hand2.x1, body_box.hand2.y1), (body_box.hand2.x2, body_box.hand2.y2), color, 1)
 
         key = cv2.waitKey(1)
         if key == 27: # ESC
