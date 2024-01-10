@@ -1660,23 +1660,32 @@ class BoTSORT(object):
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
-        body_emb_dists = 1.0 - body_current_similarities
-        body_emb_dists_mask = body_emb_dists > self.appearance_thresh
-        body_emb_dists[body_emb_dists_mask] = 1.0
+        # body_emb_dists = 1.0 - body_current_similarities
+        # body_emb_dists_mask = body_emb_dists > self.appearance_thresh
+        # body_emb_dists[body_emb_dists_mask] = 1.0
+        # face_emb_dists = 1.0 - face_current_similarities
+        # face_emb_dists_mask = face_emb_dists > self.appearance_thresh
+        # face_emb_dists[face_emb_dists_mask] = 1.0
+        # # Improved stability when returning from out-of-view angle.
+        # # if the COS distance is smaller than the default value,
+        # # the IoU distance judgment result is ignored and priority
+        # # is given to the COS distance judgment result.
+        # ious_dists_mask = np.logical_and(body_emb_dists_mask, ious_dists_mask)
+        # body_emb_dists[ious_dists_mask] = 1.0
+        # body_face_dists = np.minimum(body_emb_dists, face_emb_dists)
+        # dists = np.minimum(ious_dists, body_face_dists)
 
-        face_emb_dists = 1.0 - face_current_similarities
-        face_emb_dists_mask = face_emb_dists > self.appearance_thresh
-        face_emb_dists[face_emb_dists_mask] = 1.0
-
+        emb_dists = 1.0 - body_current_similarities
+        emb_dists_mask = emb_dists > self.appearance_thresh
+        emb_dists[emb_dists_mask] = 1.0
         # Improved stability when returning from out-of-view angle.
         # if the COS distance is smaller than the default value,
         # the IoU distance judgment result is ignored and priority
         # is given to the COS distance judgment result.
-        ious_dists_mask = np.logical_and(body_emb_dists_mask, ious_dists_mask)
-        body_emb_dists[ious_dists_mask] = 1.0
+        ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
+        emb_dists[ious_dists_mask] = 1.0
+        dists = np.minimum(ious_dists, emb_dists)
 
-        body_face_dists = np.minimum(body_emb_dists, face_emb_dists)
-        dists = np.minimum(ious_dists, body_face_dists)
 
         matches, u_track, u_detection = linear_assignment(dists, thresh=self.match_thresh)
 
