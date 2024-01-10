@@ -136,6 +136,12 @@ options:
       ```
 
 - onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT
+- The object detection results are censored for the top 20 scorers, so the system is set to not detect all persons.
+- This is a setting specific to my hobby use.
+
+  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/100d93c3-ecdb-4ebe-9291-6011cd89a546
+
+- onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT
 
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/368bbfda-b204-4246-8663-259f999dab1c
 
