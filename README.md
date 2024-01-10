@@ -151,7 +151,7 @@ options:
 
 - onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT + USBCamera
 
-  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/5523ae9f-cae5-4734-83c9-9931f01dd2c8
+  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/0aff27ed-49a4-450f-af3f-ce1fb08d395d
 
 - Models
 
