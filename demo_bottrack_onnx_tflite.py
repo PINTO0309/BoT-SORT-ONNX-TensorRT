@@ -88,7 +88,8 @@ class Color(Enum):
         return str(self) + str(s) + str(Color.RESET)
 
 class Box(ABC):
-    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+    def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+        self.trackid: int = trackid
         self.classid: int = classid
         self.score: float = score
         self.x1: int = x1
@@ -100,21 +101,21 @@ class Box(ABC):
         self.is_used: bool = is_used
 
 class Body(Box):
-    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, head: Box, hand1: Box, hand2: Box):
-        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
+    def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, head: Box, hand1: Box, hand2: Box):
+        super().__init__(trackid=trackid, classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
         self.head: Head = head
         self.hand1: Hand = hand1
         self.hand2: Hand = hand2
 
 class Head(Box):
-    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, face: Box, face_landmarks: np.ndarray):
-        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
+    def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool, face: Box, face_landmarks: np.ndarray):
+        super().__init__(trackid=trackid, classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
         self.face: Box = face
         self.face_landmarks: np.ndarray = face_landmarks
 
 class Hand(Box):
-    def __init__(self, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
-        super().__init__(classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
+    def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+        super().__init__(trackid=trackid, classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
 
 class KalmanFilter(object):
     """
@@ -440,7 +441,7 @@ class BaseTrack(object):
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh: np.ndarray, score: float, feature_history: int, body_feature: np.ndarray=None, face_feature: np.ndarray=None):
+    def __init__(self, tlwh: np.ndarray, score: float, feature_history: int, body: Body, body_feature: np.ndarray=None, face_feature: np.ndarray=None):
         """STrack
 
         Parameters
@@ -453,6 +454,8 @@ class STrack(BaseTrack):
 
         feature_history: int
             Number of features to be retained in history.
+
+        body: Body
 
         body_feature: Optional[np.ndarray]
             Features obtained from the feature extractor.
@@ -471,6 +474,8 @@ class STrack(BaseTrack):
         self.tracklet_len = 0
         self.alpha = 0.9
         self.feature_history = feature_history
+
+        self.body = body
 
         # Body features
         self.body_smooth_feature = None
@@ -578,6 +583,7 @@ class STrack(BaseTrack):
         if new_id:
             self.track_id = self.next_id()
         self.score = new_track.score
+        self.body = new_track.body
 
     def update(self, new_track: STrack, frame_id: int):
         """
@@ -603,6 +609,19 @@ class STrack(BaseTrack):
         self.is_activated = True
 
         self.score = new_track.score
+        self.body = new_track.body
+
+    def propagate_trackid_to_related_objects(self):
+        if self.body is not None:
+            self.body.trackid = self.track_id
+            if self.body.head is not None:
+                self.body.head.trackid = self.track_id
+                if self.body.head.face is not None:
+                    self.body.head.face.trackid = self.track_id
+            if self.body.hand1 is not None:
+                self.body.hand1.trackid = self.track_id
+            if self.body.hand2 is not None:
+                self.body.hand2.trackid = self.track_id
 
     @property
     def tlwh(self):
@@ -997,6 +1016,7 @@ class YOLOX(AbstractModel):
                     cy = y_min // y_max
                     result_boxes.append(
                         Box(
+                            trackid=0,
                             classid=int(box[1]),
                             score=float(score),
                             x1=x_min,
@@ -1276,6 +1296,7 @@ class RetinaFace(AbstractModel):
                     landmarks[:, 1] = landmarks[:, 1] * head_h / self._input_shapes[0][self._h_index] + head_boxes[batchno].y1
                     head_boxes[batchno].face = \
                         Box(
+                            trackid=0,
                             classid=3, # Face
                             score=float(score),
                             x1=x_min,
@@ -1440,7 +1461,7 @@ class BoTSORT(object):
         self.face_encoder: FaceReidentificationRetail0095 = face_feature_extractor_model
         self.face_strack_features: List[np.ndarray] = []
 
-    def update(self, image: np.ndarray) -> Tuple[List[STrack], List[Body]]:
+    def update(self, image: np.ndarray) -> List[STrack]:
         self.frame_id += 1
         activated_starcks: List[STrack] = []
         refind_stracks: List[STrack] = []
@@ -1455,6 +1476,7 @@ class BoTSORT(object):
         # Generate Body object
         body_boxes = [
             Body(
+                trackid=0,
                 classid=box.classid,
                 score=box.score,
                 x1=box.x1,
@@ -1473,6 +1495,7 @@ class BoTSORT(object):
         # Generate Head object
         head_boxes: List[Head] = [
             Head(
+                trackid=0,
                 classid=box.classid,
                 score=box.score,
                 x1=box.x1,
@@ -1489,6 +1512,7 @@ class BoTSORT(object):
 
         hand_boxes: List[Hand] = [
             Hand(
+                trackid=0,
                 classid=box.classid,
                 score=box.score,
                 x1=box.x1,
@@ -1604,6 +1628,9 @@ class BoTSORT(object):
             face_similarities = face_similarities_and_current_features[1]
             face_similarities = face_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
             face_current_features = face_similarities_and_current_features[0]
+            # Workaround for problems with a series of abnormal values of 0.99999999
+            close_to_value_mask = np.isclose(face_similarities, 0.9999999, atol=1e-08, rtol=1e-08)
+            face_similarities[close_to_value_mask] = 0.0
         else:
             face_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
             face_current_features = np.zeros([0, self.face_encoder.feature_size], dtype=np.float32)
@@ -1617,10 +1644,11 @@ class BoTSORT(object):
                 STrack(
                     tlwh=STrack.tlbr_to_tlwh(np.asarray([body.x1, body.y1, body.x2, body.y2])),
                     score=body.score,
-                    body_feature=body_base_feature,
+                    body=body,
+                    body_feature=body_current_feature,
                     face_feature=face_current_feature,
                     feature_history=self.feature_history,
-                ) for body, body_base_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score > self.track_high_thresh
+                ) for body, body_current_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score > self.track_high_thresh
             ]
             if len(body_boxes) != len(current_stracks) and len(current_stracks) > 0 and len(body_current_similarities) > 0:
                 # body
@@ -1646,10 +1674,11 @@ class BoTSORT(object):
                 STrack(
                     tlwh=STrack.tlbr_to_tlwh(np.asarray([body.x1, body.y1, body.x2, body.y2])),
                     score=body.score,
-                    body_feature=body_base_feature,
+                    body=body,
+                    body_feature=body_current_feature,
                     face_feature=face_current_feature,
                     feature_history=self.feature_history
-                ) for body, body_base_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score <= self.track_high_thresh and body.score >= self.track_low_thresh
+                ) for body, body_current_feature, face_current_feature in zip(body_boxes, body_current_features, face_current_features) if body.score <= self.track_high_thresh and body.score >= self.track_low_thresh
             ]
 
         # Calibration by camera motion is not performed.
@@ -1660,23 +1689,23 @@ class BoTSORT(object):
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
-        # body_emb_dists = 1.0 - body_current_similarities
-        # body_emb_dists_mask = body_emb_dists > self.appearance_thresh
-        # body_emb_dists[body_emb_dists_mask] = 1.0
-        # face_emb_dists = 1.0 - face_current_similarities
-        # face_emb_dists_mask = face_emb_dists > self.appearance_thresh
-        # face_emb_dists[face_emb_dists_mask] = 1.0
+        # @@@@@@@@@ Body only ReID
+        # emb_dists = 1.0 - body_current_similarities
+        # emb_dists_mask = emb_dists > self.appearance_thresh
+        # emb_dists[emb_dists_mask] = 1.0
         # # Improved stability when returning from out-of-view angle.
         # # if the COS distance is smaller than the default value,
         # # the IoU distance judgment result is ignored and priority
         # # is given to the COS distance judgment result.
-        # ious_dists_mask = np.logical_and(body_emb_dists_mask, ious_dists_mask)
-        # body_emb_dists[ious_dists_mask] = 1.0
-        # body_face_dists = np.minimum(body_emb_dists, face_emb_dists)
-        # dists = np.minimum(ious_dists, body_face_dists)
+        # ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
+        # emb_dists[ious_dists_mask] = 1.0
+        # dists = np.minimum(ious_dists, emb_dists)
 
+        # @@@@@@@@@ Body + Face ReID
         emb_dists = 1.0 - body_current_similarities
-        emb_dists_mask = emb_dists > self.appearance_thresh
+        face_emb_dists = 1.0 - face_current_similarities
+        emb_dists_comp = np.minimum(emb_dists, face_emb_dists)
+        emb_dists_mask = emb_dists_comp > self.appearance_thresh
         emb_dists[emb_dists_mask] = 1.0
         # Improved stability when returning from out-of-view angle.
         # if the COS distance is smaller than the default value,
@@ -1769,7 +1798,8 @@ class BoTSORT(object):
         self.lost_stracks = sub_stracks(self.lost_stracks, self.removed_stracks)
         self.removed_stracks.extend(removed_stracks)
         self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
-        return self.tracked_stracks, body_boxes
+        _ = [tracked_strack.propagate_trackid_to_related_objects() for tracked_strack in self.tracked_stracks]
+        return self.tracked_stracks
 
 
 def joint_stracks(tlista: List[STrack], tlistb: List[STrack]):
@@ -1913,7 +1943,7 @@ def find_most_relevant_object(
                 best_iou = iou
                 # baseの中心座標とtargetの中心座標のユークリッド距離を計算
                 best_distance = ((base_obj.cx - target_obj.cx)**2 + (base_obj.cy - target_obj.cy)**2)**0.5
-            elif iou == best_iou:
+            elif  iou > 0.0 and iou == best_iou:
                 # baseの中心座標とtargetの中心座標のユークリッド距離を計算
                 distance = ((base_obj.cx - target_obj.cx)**2 + (base_obj.cy - target_obj.cy)**2)**0.5
                 if distance < best_distance:
@@ -2292,7 +2322,7 @@ def main():
         debug_image_w = debug_image.shape[1]
 
         start_time = time.perf_counter()
-        stracks, body_boxes = botsort.update(image=debug_image)
+        stracks = botsort.update(image=debug_image)
         elapsed_time = time.perf_counter() - start_time
         cv2.putText(debug_image, f'{elapsed_time*1000:.2f} ms', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(debug_image, f'{elapsed_time*1000:.2f} ms', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1, cv2.LINE_AA)
@@ -2306,26 +2336,43 @@ def main():
             cv2.putText(debug_image, f'{strack.track_id}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(debug_image, f'{strack.track_id}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
-        for body_box in body_boxes:
-            if body_box.head is not None:
-                color = get_cv_color(body_box.head.classid)
-                cv2.rectangle(debug_image, (body_box.head.x1, body_box.head.y1), (body_box.head.x2, body_box.head.y2), (255,255,255), 2)
-                cv2.rectangle(debug_image, (body_box.head.x1, body_box.head.y1), (body_box.head.x2, body_box.head.y2), color, 1)
+            if strack.body is not None:
+                body = strack.body
+                if body.head is not None:
+                    color = get_cv_color(body.head.classid)
+                    cv2.rectangle(debug_image, (body.head.x1, body.head.y1), (body.head.x2, body.head.y2), (255,255,255), 2)
+                    cv2.rectangle(debug_image, (body.head.x1, body.head.y1), (body.head.x2, body.head.y2), color, 1)
+                    ptx = body.head.x1 if body.head.x1+50 < debug_image_w else debug_image_w-50
+                    pty = body.head.y1-10 if body.head.y1-25 > 0 else 20
+                    cv2.putText(debug_image, f'{body.head.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.putText(debug_image, f'{body.head.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
-                if body_box.head.face is not None:
-                    color = get_cv_color(body_box.head.face.classid)
-                    draw_dashed_rectangle(debug_image, (body_box.head.face.x1, body_box.head.face.y1), (body_box.head.face.x2, body_box.head.face.y2), (255,255,255), 2, 5)
-                    draw_dashed_rectangle(debug_image, (body_box.head.face.x1, body_box.head.face.y1), (body_box.head.face.x2, body_box.head.face.y2), color, 1, 5)
+                    if body.head.face is not None:
+                        color = get_cv_color(body.head.face.classid)
+                        draw_dashed_rectangle(debug_image, (body.head.face.x1, body.head.face.y1), (body.head.face.x2, body.head.face.y2), (255,255,255), 2, 5)
+                        draw_dashed_rectangle(debug_image, (body.head.face.x1, body.head.face.y1), (body.head.face.x2, body.head.face.y2), color, 1, 5)
+                        ptx = body.head.face.x1 if body.head.face.x1+50 < debug_image_w else debug_image_w-50
+                        pty = body.head.face.y1-10 if body.head.face.y1-25 > 0 else 20
+                        cv2.putText(debug_image, f'{body.head.face.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                        cv2.putText(debug_image, f'{body.head.face.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
-            if body_box.hand1 is not None:
-                color = get_cv_color(body_box.hand1.classid)
-                cv2.rectangle(debug_image, (body_box.hand1.x1, body_box.hand1.y1), (body_box.hand1.x2, body_box.hand1.y2), (255,255,255), 2)
-                cv2.rectangle(debug_image, (body_box.hand1.x1, body_box.hand1.y1), (body_box.hand1.x2, body_box.hand1.y2), color, 1)
+                if body.hand1 is not None:
+                    color = get_cv_color(body.hand1.classid)
+                    cv2.rectangle(debug_image, (body.hand1.x1, body.hand1.y1), (body.hand1.x2, body.hand1.y2), (255,255,255), 2)
+                    cv2.rectangle(debug_image, (body.hand1.x1, body.hand1.y1), (body.hand1.x2, body.hand1.y2), color, 1)
+                    ptx = body.hand1.x1 if body.hand1.x1+50 < debug_image_w else debug_image_w-50
+                    pty = body.hand1.y1-10 if body.hand1.y1-25 > 0 else 20
+                    cv2.putText(debug_image, f'{body.hand1.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.putText(debug_image, f'{body.hand1.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
-            if body_box.hand2 is not None:
-                color = get_cv_color(body_box.hand2.classid)
-                cv2.rectangle(debug_image, (body_box.hand2.x1, body_box.hand2.y1), (body_box.hand2.x2, body_box.hand2.y2), (255,255,255), 2)
-                cv2.rectangle(debug_image, (body_box.hand2.x1, body_box.hand2.y1), (body_box.hand2.x2, body_box.hand2.y2), color, 1)
+                if body.hand2 is not None:
+                    color = get_cv_color(body.hand2.classid)
+                    cv2.rectangle(debug_image, (body.hand2.x1, body.hand2.y1), (body.hand2.x2, body.hand2.y2), (255,255,255), 2)
+                    cv2.rectangle(debug_image, (body.hand2.x1, body.hand2.y1), (body.hand2.x2, body.hand2.y2), color, 1)
+                    ptx = body.hand2.x1 if body.hand2.x1+50 < debug_image_w else debug_image_w-50
+                    pty = body.hand2.y1-10 if body.hand2.y1-25 > 0 else 20
+                    cv2.putText(debug_image, f'{body.hand2.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.putText(debug_image, f'{body.hand2.trackid}', (ptx, pty), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 1, cv2.LINE_AA)
 
         key = cv2.waitKey(1)
         if key == 27: # ESC
