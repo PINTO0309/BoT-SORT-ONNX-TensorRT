@@ -153,6 +153,10 @@ options:
 
   https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/73e0f2b0-ff0c-44e1-b27a-9ca8731f93cc
 
+- onnxruntime + TensorRT 8.5.3 + YOLOX-X + BoT-SORT + USBCamera + Body,Head,Face,Hand + Multi-Human
+
+  https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/f08ebb6d-2aeb-4db7-bde8-06c0419f5358
+
 - Models
 
    1. https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/tag/onnx
