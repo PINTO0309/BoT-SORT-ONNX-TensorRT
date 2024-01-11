@@ -1628,6 +1628,9 @@ class BoTSORT(object):
             face_similarities = face_similarities_and_current_features[1]
             face_similarities = face_similarities.transpose(1, 0) # N: boxes M: stracks, [N, M] -> [M, N]
             face_current_features = face_similarities_and_current_features[0]
+            # Workaround for problems with a series of abnormal values of 0.99999999
+            close_to_value_mask = np.isclose(face_similarities, 0.9999999, atol=1e-08, rtol=1e-08)
+            face_similarities[close_to_value_mask] = 0.0
         else:
             face_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
             face_current_features = np.zeros([0, self.face_encoder.feature_size], dtype=np.float32)
@@ -1686,21 +1689,8 @@ class BoTSORT(object):
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
-
-        emb_dists = 1.0 - body_current_similarities
-        emb_dists_mask = emb_dists > self.appearance_thresh
-        emb_dists[emb_dists_mask] = 1.0
-        # Improved stability when returning from out-of-view angle.
-        # if the COS distance is smaller than the default value,
-        # the IoU distance judgment result is ignored and priority
-        # is given to the COS distance judgment result.
-        ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
-        emb_dists[ious_dists_mask] = 1.0
-        dists = np.minimum(ious_dists, emb_dists)
-
+        # @@@@@@@@@ Body only ReID
         # emb_dists = 1.0 - body_current_similarities
-        # face_emb_dists = 1.0 - face_current_similarities
-        # emb_dists = np.minimum(emb_dists, face_emb_dists)
         # emb_dists_mask = emb_dists > self.appearance_thresh
         # emb_dists[emb_dists_mask] = 1.0
         # # Improved stability when returning from out-of-view angle.
@@ -1710,6 +1700,20 @@ class BoTSORT(object):
         # ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
         # emb_dists[ious_dists_mask] = 1.0
         # dists = np.minimum(ious_dists, emb_dists)
+
+        # @@@@@@@@@ Body + Face ReID
+        emb_dists = 1.0 - body_current_similarities
+        face_emb_dists = 1.0 - face_current_similarities
+        emb_dists = np.minimum(emb_dists, face_emb_dists)
+        emb_dists_mask = emb_dists > self.appearance_thresh
+        emb_dists[emb_dists_mask] = 1.0
+        # Improved stability when returning from out-of-view angle.
+        # if the COS distance is smaller than the default value,
+        # the IoU distance judgment result is ignored and priority
+        # is given to the COS distance judgment result.
+        ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
+        emb_dists[ious_dists_mask] = 1.0
+        dists = np.minimum(ious_dists, emb_dists)
 
 
         matches, u_track, u_detection = linear_assignment(dists, thresh=self.match_thresh)
