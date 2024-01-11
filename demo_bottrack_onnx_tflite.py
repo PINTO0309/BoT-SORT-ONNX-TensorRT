@@ -1704,8 +1704,8 @@ class BoTSORT(object):
         # @@@@@@@@@ Body + Face ReID
         emb_dists = 1.0 - body_current_similarities
         face_emb_dists = 1.0 - face_current_similarities
-        emb_dists = np.minimum(emb_dists, face_emb_dists)
-        emb_dists_mask = emb_dists > self.appearance_thresh
+        emb_dists_comp = np.minimum(emb_dists, face_emb_dists)
+        emb_dists_mask = emb_dists_comp > self.appearance_thresh
         emb_dists[emb_dists_mask] = 1.0
         # Improved stability when returning from out-of-view angle.
         # if the COS distance is smaller than the default value,
