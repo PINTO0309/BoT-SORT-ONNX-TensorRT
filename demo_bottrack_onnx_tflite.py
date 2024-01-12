@@ -1250,6 +1250,8 @@ class RetinaFace(AbstractModel):
                 )
                 resized_image = resized_image[..., ::-1] # BGR->RGB
                 resized_image_list.append(resized_image)
+            else:
+                resized_image_list.append(np.zeros((self._input_shapes[0][self._h_index], self._input_shapes[0][self._w_index], c), dtype=np.uint8))
         resized_images = np.asarray(resized_image_list, dtype=self._input_dtypes[0])
         resized_images = resized_images.transpose(swap)
         resized_images = (resized_images - self._mean)
