@@ -1288,8 +1288,8 @@ class RetinaFace(AbstractModel):
                     y_min = int(max(0, box[4]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
                     x_max = int(min(box[5], self._input_shapes[0][self._w_index]) * head_w / self._input_shapes[0][self._w_index]) + head_boxes[batchno].x1
                     y_max = int(min(box[6], self._input_shapes[0][self._h_index]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
-                    cx = x_min // x_max
-                    cy = y_min // y_max
+                    cx = (x_min + x_max) // 2
+                    cy = (y_min + y_max) // 2
                     landmarks: np.ndarray = box[7:]
                     landmarks = landmarks.reshape(-1, 2).astype(np.int32)
                     landmarks[:, 0] = landmarks[:, 0] * head_w / self._input_shapes[0][self._w_index] + head_boxes[batchno].x1
