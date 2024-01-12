@@ -1634,8 +1634,8 @@ class BoTSORT(object):
             close_to_value_mask = np.isclose(face_similarities, 0.9999999, atol=1e-08, rtol=1e-08)
             face_similarities[close_to_value_mask] = 0.0
         else:
-            face_similarities = np.zeros([0, len(strack_pool)], dtype=np.float32).transpose(1, 0)
-            face_current_features = np.zeros([0, self.face_encoder.feature_size], dtype=np.float32)
+            face_similarities = np.zeros([len(person_images), len(strack_pool)], dtype=np.float32).transpose(1, 0)
+            face_current_features = np.zeros([len(person_images), self.face_encoder.feature_size], dtype=np.float32)
 
         current_stracks: List[STrack] = []
         body_current_similarities: np.ndarray = copy.deepcopy(body_similarities)
