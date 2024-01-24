@@ -45,14 +45,21 @@ https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/assets/33194443/097ee727-227
 usage: demo_bottrack_onnx_tfite.py \
   [-h] \
   [-odm {
-    yolox_n_body_head_hand_post_0461_0.4428_1x3x384x640.onnx,
-    yolox_t_body_head_hand_post_0299_0.4522_1x3x384x640.onnx,
-    yolox_s_body_head_hand_post_0299_0.4983_1x3x384x640.onnx,
-    yolox_m_body_head_hand_post_0299_0.5263_1x3x384x640.onnx,
-    yolox_l_body_head_hand_post_0299_0.5420_1x3x384x640.onnx,
-    yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx
+    yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx
   }] \
-  [-fem {
+  [-bfem {
+    mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x288x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x320x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x352x128_post_feature_only.onnx,
+    mot17_sbs_S50_NMx3x384x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x256x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x288x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x320x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x352x128_post_feature_only.onnx,
+    mot20_sbs_S50_NMx3x384x128_post_feature_only.onnx
+  }] \
+  [-ffem {
     mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx,
     mot17_sbs_S50_NMx3x288x128_post_feature_only.onnx,
     mot17_sbs_S50_NMx3x320x128_post_feature_only.onnx,
@@ -74,7 +81,9 @@ options:
     show this help message and exit
   -odm {...}, --object_detection_model {...}
     ONNX/TFLite file path for YOLOX.
-  -fem {...}, --feature_extractor_model {...}
+  -bfem {...}, --body_feature_extractor_model {...}
+    ONNX/TFLite file path for BodyReID.
+  -ffem {...}, --face_feature_extractor_model {...}
     ONNX/TFLite file path for FastReID.
   -tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...], \
     --track_target_classes TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]

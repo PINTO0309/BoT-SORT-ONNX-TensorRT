@@ -14,7 +14,7 @@ import copy
 import cv2
 import time
 import lap
-import requests
+import requests # type: ignore
 import subprocess
 import numpy as np
 import scipy.linalg
@@ -31,16 +31,10 @@ NVIDIA_GPU_MODELS_CC = [
 ]
 
 ONNX_TRTENGINE_SETS = {
-    'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx': [
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_0_0_fp16_sm86.engine',
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.engine',
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_910520829314548387_1_1_fp16_sm86.profile',
-    ],
-    'retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx': [
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_0_0_fp16_sm86.engine',
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_0_0_fp16_sm86.profile',
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_1_1_fp16_sm86.engine',
-        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_872229052433028103_1_1_fp16_sm86.profile',
+    'yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx': [
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_14915622583698702352_0_0_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_14915622583698702352_1_1_fp16_sm86.engine',
+        'TensorrtExecutionProvider_TRTKernel_graph_main_graph_14915622583698702352_1_1_fp16_sm86.profile',
     ],
     'face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx': [
         'TensorrtExecutionProvider_TRTKernel_graph_tf2onnx_2180071764421166639_0_0_fp16_sm86.engine',
@@ -112,6 +106,10 @@ class Head(Box):
         super().__init__(trackid=trackid, classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
         self.face: Box = face
         self.face_landmarks: np.ndarray = face_landmarks
+
+class Face(Box):
+    def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
+        super().__init__(trackid=trackid, classid=classid, score=score, x1=x1, y1=y1, x2=x2, y2=y2, cx=cx, cy=cy, is_used=is_used)
 
 class Hand(Box):
     def __init__(self, trackid: int, classid: int, score: float, x1: int, y1: int, x2: int, y2: int, cx: int, cy: int, is_used: bool):
@@ -860,7 +858,7 @@ class YOLOX(AbstractModel):
         self,
         *,
         runtime: Optional[str] = 'onnx',
-        model_path: Optional[str] = 'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx',
+        model_path: Optional[str] = 'yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx',
         class_score_th: Optional[float] = 0.35,
         providers: Optional[List] = None,
     ):
@@ -1143,175 +1141,6 @@ class FastReID(AbstractModel):
         resized_base_images_np = resized_base_images_np.astype(self._input_dtypes[0])
         return resized_base_images_np
 
-class RetinaFace(AbstractModel):
-    def __init__(
-        self,
-        *,
-        runtime: Optional[str] = 'onnx',
-        model_path: Optional[str] = 'retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx',
-        class_score_th: Optional[float] = 0.15,
-        providers: Optional[List] = None,
-    ):
-        """RetinaFace
-
-        Parameters
-        ----------
-        runtime: Optional[str]
-            Runtime for RetinaFace. Default: onnx
-
-        model_path: Optional[str]
-            ONNX/TFLite file path for RetinaFace
-
-        class_score_th: Optional[float]
-            Score threshold. Default: 0.35
-
-        providers: Optional[List]
-            Providers for ONNXRuntime.
-        """
-        super().__init__(
-            runtime=runtime,
-            model_path=model_path,
-            class_score_th=class_score_th,
-            mean=np.asarray([104, 117, 123], dtype=np.float32),
-            providers=providers,
-        )
-
-    def __call__(
-        self,
-        image: np.ndarray,
-        head_boxes: List[Head],
-    ) -> List[Head]:
-        """
-
-        Parameters
-        ----------
-        image: np.ndarray
-            Entire image
-
-        head_boxes: List[Head]
-            Head boxes
-
-        Returns
-        -------
-        head_face_boxes: List[Head]
-            Head & Face boxes
-        """
-        temp_image = copy.deepcopy(image)
-        temp_head_boxes = copy.deepcopy(head_boxes)
-        # PreProcess
-        inferece_images = \
-            self._preprocess(
-                image=temp_image,
-                boxes=temp_head_boxes,
-            )
-        # Inference
-        outputs = super().__call__(input_datas=[inferece_images])
-        batchno_classid_score_x1y1x2y2_landms = outputs[0]
-        # PostProcess
-        head_face_boxes = \
-            self._postprocess(
-                face_boxes=batchno_classid_score_x1y1x2y2_landms,
-                head_boxes=temp_head_boxes,
-            )
-        return head_face_boxes
-
-    def _preprocess(
-        self,
-        image: np.ndarray,
-        boxes: List[Head],
-        swap: Optional[Tuple[int,int,int,int]] = (0, 3, 1, 2),
-    ) -> np.ndarray:
-        """_preprocess
-
-        Parameters
-        ----------
-        image: np.ndarray
-            Entire image
-
-        swap: tuple
-
-        Returns
-        -------
-        resized_image: np.ndarray
-            Resized and normalized image.
-        """
-        cropped_boxes = [image[box.y1:box.y2, box.x1:box.x2, :] for box in boxes]
-        # Normalization + BGR->RGB
-        resized_image_list: List[np.ndarray] = []
-        for cropped_box in cropped_boxes:
-            h, w, c = cropped_box.shape
-            if h > 0 and w > 0:
-                resized_image = cv2.resize(
-                    cropped_box,
-                    (
-                        int(self._input_shapes[0][self._w_index]),
-                        int(self._input_shapes[0][self._h_index]),
-                    )
-                )
-                resized_image = resized_image[..., ::-1] # BGR->RGB
-                resized_image_list.append(resized_image)
-            else:
-                resized_image_list.append(np.zeros((self._input_shapes[0][self._h_index], self._input_shapes[0][self._w_index], c), dtype=np.uint8))
-        resized_images = np.asarray(resized_image_list, dtype=self._input_dtypes[0])
-        resized_images = resized_images.transpose(swap)
-        resized_images = (resized_images - self._mean)
-        return resized_images
-
-    def _postprocess(
-        self,
-        face_boxes: np.ndarray,
-        head_boxes: List[Head],
-    ) -> List[Head]:
-        """_postprocess
-
-        Parameters
-        ----------
-        face_boxes: np.ndarray
-            float32[N, 7]
-
-        head_boxes: List[Head]
-
-        Returns
-        -------
-        head_face_boxes: List[Head]
-            Head & Face boxes
-        """
-        if len(face_boxes) > 0:
-            scores = face_boxes[:, 2:3]
-            keep_idxs = scores[:, 0] > self._class_score_th
-            scores_keep = scores[keep_idxs, :]
-            boxes_keep = face_boxes[keep_idxs, :]
-            if len(boxes_keep) > 0:
-                for box, score in zip(boxes_keep, scores_keep):
-                    batchno = int(box[0])
-                    head_w = abs(head_boxes[batchno].x2 - head_boxes[batchno].x1)
-                    head_h = abs(head_boxes[batchno].y2 - head_boxes[batchno].y1)
-                    x_min = int(max(0, box[3]) * head_w / self._input_shapes[0][self._w_index]) + head_boxes[batchno].x1
-                    y_min = int(max(0, box[4]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
-                    x_max = int(min(box[5], self._input_shapes[0][self._w_index]) * head_w / self._input_shapes[0][self._w_index]) + head_boxes[batchno].x1
-                    y_max = int(min(box[6], self._input_shapes[0][self._h_index]) * head_h / self._input_shapes[0][self._h_index]) + head_boxes[batchno].y1
-                    cx = (x_min + x_max) // 2
-                    cy = (y_min + y_max) // 2
-                    landmarks: np.ndarray = box[7:]
-                    landmarks = landmarks.reshape(-1, 2).astype(np.int32)
-                    landmarks[:, 0] = landmarks[:, 0] * head_w / self._input_shapes[0][self._w_index] + head_boxes[batchno].x1
-                    landmarks[:, 1] = landmarks[:, 1] * head_h / self._input_shapes[0][self._h_index] + head_boxes[batchno].y1
-                    head_boxes[batchno].face = \
-                        Box(
-                            trackid=0,
-                            classid=3, # Face
-                            score=float(score),
-                            x1=x_min,
-                            y1=y_min,
-                            x2=x_max,
-                            y2=y_max,
-                            cx=cx,
-                            cy=cy,
-                            is_used=False,
-                        )
-                    head_boxes[batchno].face_landmarks = landmarks
-        return head_boxes
-
 class FaceReidentificationRetail0095(AbstractModel):
     def __init__(
         self,
@@ -1424,7 +1253,6 @@ class BoTSORT(object):
     def __init__(
         self,
         object_detection_model,
-        face_detection_model,
         body_feature_extractor_model,
         face_feature_extractor_model,
         frame_rate: int=30,
@@ -1451,9 +1279,6 @@ class BoTSORT(object):
 
         # Object detection module
         self.detector: YOLOX = object_detection_model
-
-        # Face detection module
-        self.face_detector: RetinaFace = face_detection_model
 
         # BodyReID module
         self.body_encoder: FastReID = body_feature_extractor_model
@@ -1512,6 +1337,7 @@ class BoTSORT(object):
             ) for box in detected_boxes if box.classid == 1 # Head
         ]
 
+        # Generate Hand object
         hand_boxes: List[Hand] = [
             Hand(
                 trackid=0,
@@ -1527,21 +1353,43 @@ class BoTSORT(object):
             ) for box in detected_boxes if box.classid == 2 # Hand
         ]
 
-        # Generate Head_Face object
-        head_face_boxes: List[Head] = []
-        if len(head_boxes) > 0:
-            head_face_boxes = self.face_detector(image=debug_image, head_boxes=head_boxes)
+        # Generate Face object
+        face_boxes: List[Face] = [
+            Face(
+                trackid=0,
+                classid=box.classid,
+                score=box.score,
+                x1=box.x1,
+                y1=box.y1,
+                x2=box.x2,
+                y2=box.y2,
+                cx=box.cx,
+                cy=box.cy,
+                is_used=False,
+            ) for box in detected_boxes if box.classid == 3 # Face
+        ]
+
+        # Associate Face object to Head object
+        if len(face_boxes) > 0:
+            for head_box in head_boxes:
+                closest_face_box: Box = \
+                    find_most_relevant_object(
+                        base_obj=head_box,
+                        target_objs=face_boxes,
+                    )
+                if closest_face_box is not None:
+                    head_box.face = closest_face_box
 
         # Associate Head_Face object to Body object
-        if len(head_face_boxes) > 0:
+        if len(head_boxes) > 0:
             for body_box in body_boxes:
-                closest_head_face_box: Box = \
+                closest_head_box: Box = \
                     find_most_relevant_object(
                         base_obj=body_box,
-                        target_objs=head_face_boxes,
+                        target_objs=head_boxes,
                     )
-                if closest_head_face_box is not None:
-                    body_box.head = closest_head_face_box
+                if closest_head_box is not None:
+                    body_box.head = closest_head_box
 
         # Associate Hand object to Body object
         if len(hand_boxes) > 0:
@@ -1691,18 +1539,6 @@ class BoTSORT(object):
         ious_dists = iou_distance(strack_pool, current_stracks)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
-        # @@@@@@@@@ Body only ReID
-        # emb_dists = 1.0 - body_current_similarities
-        # emb_dists_mask = emb_dists > self.appearance_thresh
-        # emb_dists[emb_dists_mask] = 1.0
-        # # Improved stability when returning from out-of-view angle.
-        # # if the COS distance is smaller than the default value,
-        # # the IoU distance judgment result is ignored and priority
-        # # is given to the COS distance judgment result.
-        # ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
-        # emb_dists[ious_dists_mask] = 1.0
-        # dists = np.minimum(ious_dists, emb_dists)
-
         # @@@@@@@@@ Body + Face ReID
         emb_dists = 1.0 - body_current_similarities
         face_emb_dists = 1.0 - face_current_similarities
@@ -1716,7 +1552,6 @@ class BoTSORT(object):
         ious_dists_mask = np.logical_and(emb_dists_mask, ious_dists_mask)
         emb_dists[ious_dists_mask] = 1.0
         dists = np.minimum(ious_dists, emb_dists)
-
 
         matches, u_track, u_detection = linear_assignment(dists, thresh=self.match_thresh)
 
@@ -2064,26 +1899,11 @@ def main():
         '-odm',
         '--object_detection_model',
         type=str,
-        default='yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx',
+        default='yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx',
         choices=[
-            'yolox_n_body_head_hand_post_0461_0.4428_1x3x384x640.onnx',
-            'yolox_t_body_head_hand_post_0299_0.4522_1x3x384x640.onnx',
-            'yolox_s_body_head_hand_post_0299_0.4983_1x3x384x640.onnx',
-            'yolox_m_body_head_hand_post_0299_0.5263_1x3x384x640.onnx',
-            'yolox_l_body_head_hand_post_0299_0.5420_1x3x384x640.onnx',
-            'yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx',
+            'yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx',
         ],
         help='ONNX/TFLite file path for YOLOX.',
-    )
-    parser.add_argument(
-        '-fdm',
-        '--face_detection_model',
-        type=str,
-        default='retinaface_resnet50_with_postprocess_Nx3x96x96_max001_th015.onnx',
-        choices=[
-            'retinaface_mbn025_with_postprocess_Nx3x96x96_max001_th0.15.onnx',
-        ],
-        help='ONNX/TFLite file path for RetinaFace.',
     )
     parser.add_argument(
         '-bfem',
@@ -2142,16 +1962,13 @@ def main():
 
     # runtime check
     object_detection_model_file: str = args.object_detection_model
-    face_detection_model_file: str = args.face_detection_model
     body_feature_extractor_model_file: str = args.body_feature_extractor_model
     face_feature_extractor_model_file: str = args.face_feature_extractor_model
     object_detection_model_ext: str = os.path.splitext(object_detection_model_file)[1][1:].lower()
-    face_detection_model_ext: str = os.path.splitext(face_detection_model_file)[1][1:].lower()
     body_feature_extractor_model_ext: str = os.path.splitext(body_feature_extractor_model_file)[1][1:].lower()
     face_feature_extractor_model_ext: str = os.path.splitext(face_feature_extractor_model_file)[1][1:].lower()
     runtime: str = None
     if object_detection_model_ext != body_feature_extractor_model_ext \
-        or object_detection_model_ext != face_detection_model_ext \
         or object_detection_model_ext != face_feature_extractor_model_ext:
         print(Color.RED('ERROR: object_detection_model and face_detection_model and feature_extractor_model must be files with the same extension.'))
         sys.exit(0)
@@ -2187,20 +2004,6 @@ def main():
         url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
         download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
     # Download object detection tensorrt engine
-    if default_supported_gpu_model:
-        trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
-        if trt_engine_files is not None:
-            for trt_engine_file in trt_engine_files:
-                if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, trt_engine_file)):
-                    url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{trt_engine_file}"
-                    download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=trt_engine_file)
-
-    # Download face detection onnx
-    weight_file = os.path.basename(face_detection_model_file)
-    if not os.path.isfile(os.path.join(WEIGHT_FOLDER_PATH, weight_file)):
-        url = f"https://github.com/PINTO0309/BoT-SORT-ONNX-TensorRT/releases/download/onnx/{weight_file}"
-        download_file(url=url, folder=WEIGHT_FOLDER_PATH, filename=weight_file)
-    # Download reid tensorrt engine
     if default_supported_gpu_model:
         trt_engine_files = ONNX_TRTENGINE_SETS.get(weight_file, None)
         if trt_engine_files is not None:
@@ -2269,13 +2072,6 @@ def main():
             model_path=object_detection_model_file,
             providers=providers,
         )
-    face_detection_model = \
-        RetinaFace(
-            runtime=runtime,
-            model_path=face_detection_model_file,
-            class_score_th=0.85,
-            providers=providers,
-        )
     body_feature_extractor_model = \
         FastReID(
             runtime=runtime,
@@ -2291,7 +2087,6 @@ def main():
     botsort = \
         BoTSORT(
             object_detection_model=object_detection_model,
-            face_detection_model=face_detection_model,
             body_feature_extractor_model=body_feature_extractor_model,
             face_feature_extractor_model=face_feature_extractor_model,
             frame_rate=30,

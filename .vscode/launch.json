@@ -9,7 +9,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "-odm", "yolox_x_body_head_hand_post_0102_0.5533_1x3x384x640.onnx",
+                "-odm", "yolox_x_body_head_hand_face_0076_0.5228_post_1x3x480x640_score015_iou080_box050.onnx",
                 "-v", "0",
                 "-ep", "tensorrt",
             ]
