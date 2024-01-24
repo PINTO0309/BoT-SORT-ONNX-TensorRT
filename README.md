@@ -74,7 +74,8 @@ usage: demo_bottrack_onnx_tfite.py \
   [-tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]] \
   [-v VIDEO] \
   [-ep {cpu,cuda,tensorrt}] \
-  [-dvw]
+  [-dvw] \
+  [-fm]
 
 options:
   -h, --help
@@ -96,6 +97,8 @@ options:
     Disable video writer. Eliminates the file I/O load associated with automatic recording
     to MP4. Devices that use a MicroSD card or similar for main storage can speed up overall
     processing.
+  -fm, --face_mosaic
+    Face mosaic.
 ```
 
 - **`The first run on TensorRT EP takes about 15 minutes to compile ONNX to TensorRT Engine. Anyone who can't use this environment to its fullest should stay away.`**

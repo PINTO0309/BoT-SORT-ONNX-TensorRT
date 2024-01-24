@@ -1958,6 +1958,12 @@ def main():
             'Eliminates the file I/O load associated with automatic recording to MP4. '+
             'Devices that use a MicroSD card or similar for main storage can speed up overall processing.',
     )
+    parser.add_argument(
+        '-fm',
+        '--face_mosaic',
+        action='store_true',
+        help='Face mosaic.',
+    )
     args = parser.parse_args()
 
     # runtime check
@@ -2108,6 +2114,8 @@ def main():
             fps=cap_fps,
             frameSize=(w, h),
         )
+    face_mosaic: bool = args.face_mosaic
+
 
     while cap.isOpened():
         res, image = cap.read()
@@ -2146,6 +2154,11 @@ def main():
 
                     if body.head.face is not None:
                         color = get_cv_color(body.head.face.classid)
+                        if face_mosaic:
+                            w = abs(body.head.face.x2 - body.head.face.x1)
+                            h = abs(body.head.face.y2 - body.head.face.y1)
+                            debug_image[body.head.face.y1:body.head.face.y2, body.head.face.x1:body.head.face.x2, :] = \
+                                cv2.resize(cv2.resize(debug_image[body.head.face.y1:body.head.face.y2, body.head.face.x1:body.head.face.x2, :], (2, 2)), (w, h))
                         draw_dashed_rectangle(debug_image, (body.head.face.x1, body.head.face.y1), (body.head.face.x2, body.head.face.y2), (255,255,255), 2, 5)
                         draw_dashed_rectangle(debug_image, (body.head.face.x1, body.head.face.y1), (body.head.face.x2, body.head.face.y2), color, 1, 5)
                         ptx = body.head.face.x1 if body.head.face.x1+50 < debug_image_w else debug_image_w-50
