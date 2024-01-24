@@ -66,16 +66,7 @@ usage: demo_bottrack_onnx_tfite.py \
     mot20_sbs_S50_NMx3x384x128_post_feature_only.onnx
   }] \
   [-ffem {
-    mot17_sbs_S50_NMx3x256x128_post_feature_only.onnx,
-    mot17_sbs_S50_NMx3x288x128_post_feature_only.onnx,
-    mot17_sbs_S50_NMx3x320x128_post_feature_only.onnx,
-    mot17_sbs_S50_NMx3x352x128_post_feature_only.onnx,
-    mot17_sbs_S50_NMx3x384x128_post_feature_only.onnx,
-    mot20_sbs_S50_NMx3x256x128_post_feature_only.onnx,
-    mot20_sbs_S50_NMx3x288x128_post_feature_only.onnx,
-    mot20_sbs_S50_NMx3x320x128_post_feature_only.onnx,
-    mot20_sbs_S50_NMx3x352x128_post_feature_only.onnx,
-    mot20_sbs_S50_NMx3x384x128_post_feature_only.onnx
+    face-reidentification-retail-0095_NMx3x128x128_post_feature_only.onnx
   }] \
   [-tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]] \
   [-v VIDEO] \
