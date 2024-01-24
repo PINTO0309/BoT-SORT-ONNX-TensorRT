@@ -91,7 +91,7 @@ options:
   -bfem {...}, --body_feature_extractor_model {...}
     ONNX/TFLite file path for BodyReID.
   -ffem {...}, --face_feature_extractor_model {...}
-    ONNX/TFLite file path for FastReID.
+    ONNX/TFLite file path for FaceReID.
   -tc TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...], \
     --track_target_classes TRACK_TARGET_CLASSES [TRACK_TARGET_CLASSES ...]
     List of class IDs to be tracked. 0:Body, 1: Head, 2: Hand
